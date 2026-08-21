@@ -58,10 +58,13 @@ Verification: the same 16M-message / 128-instrument stream is run through the
 parallel engine and a single thread; **full-band depth of every instrument
 must be byte-identical** (proves the sharding invariant).
 
-Measured (Core Ultra 9 275HX, 8P+16E, Windows 11): single demux feeding 8
-workers reaches ~49M msgs/s, demux-bound beyond that. With the feed pre-split
-per shard (exactly how NASDAQ distributes ITCH across parallel MoldUDP
-channels), 23 workers reach **~148M msgs/s aggregate**.
+Measured (Core Ultra 9 275HX, 8P+16E, Windows 11). Single core, end to end:
+8.5-10.6M msgs/s across six idle runs (best recorded run: 13.8M; throughput is
+sensitive to turbo and DRAM contention, so the honest headline is 10M+).
+Single demux feeding 8 workers reaches ~49M msgs/s, demux-bound beyond that.
+With the feed pre-split per shard (exactly how NASDAQ distributes ITCH across
+parallel MoldUDP channels), 23 workers measure **113-120M msgs/s aggregate**
+(best recorded run: 148M).
 
 ## Build & run
 
