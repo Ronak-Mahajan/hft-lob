@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/engine.hpp — Phase 5: sharded multi-core market engine.
+// lob/engine.hpp - Phase 5: sharded multi-core market engine.
 //
 // Topology:
 //
@@ -12,7 +12,7 @@
 //        └── ...
 //
 // The correctness invariant that makes the books lock-free: ALL messages for
-// a given instrument land on ONE worker, and the ring is FIFO — so each book
+// a given instrument land on ONE worker, and the ring is FIFO, so each book
 // still sees its message stream in exchange order, and the single-writer
 // LimitOrderBook from Phase 2 is reused byte-for-byte, no atomics added.
 // Cross-instrument ordering is not preserved, and doesn't need to be (the
@@ -89,7 +89,7 @@ public:
             uint16_t mlen = static_cast<uint16_t>((p[0] << 8) | p[1]);
             const uint8_t* msg = p + 2;
             if (LOB_UNLIKELY(msg + mlen > end)) break;
-            // stock_locate sits at bytes 1..2 of every order message — the
+            // stock_locate sits at bytes 1..2 of every order message - the
             // demux never decodes more than that.
             uint16_t locate = static_cast<uint16_t>((msg[1] << 8) | msg[2]);
             Ring& r = *rings_[locate % W_];
@@ -142,7 +142,7 @@ private:
             }
             // Exponential backoff on an empty ring. A tight poll keeps the
             // ring's tail_ line in Shared state, so every producer push to
-            // this shard pays a request-for-ownership — idle consumers were
+            // this shard pays a request-for-ownership - idle consumers were
             // measurably slowing the producer down. Backoff caps at ~64
             // pauses (≈ a few hundred ns of added wake-up latency; a
             // latency-critical deployment would bound this lower).

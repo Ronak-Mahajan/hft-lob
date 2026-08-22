@@ -1,15 +1,15 @@
 // ---------------------------------------------------------------------------
-// parallel_main.cpp — Phase 5: verification & scaling benchmarks.
+// parallel_main.cpp - Phase 5: verification & scaling benchmarks.
 //
 // 1. Verification: the SAME multi-instrument stream is processed (a) by the
 //    parallel engine across N cores and (b) sequentially on one thread; every
 //    instrument's full depth must match exactly. This proves the sharding
 //    invariant (per-instrument order preserved through demux + ring).
-// 2. Demux scaling: 1 producer fanning out to W workers — the realistic
+// 2. Demux scaling: 1 producer fanning out to W workers, the realistic
 //    single-feed topology; exposes the demux thread as the eventual ceiling.
 // 3. Multi-channel scaling: the stream pre-split per shard (exactly how
 //    NASDAQ actually distributes ITCH across parallel MoldUDP channels),
-//    each worker ingesting its own channel — measures aggregate book
+//    each worker ingesting its own channel; measures aggregate book
 //    throughput without a demux bottleneck.
 // ---------------------------------------------------------------------------
 #include <chrono>
@@ -284,7 +284,7 @@ int main() {
             std::printf("  MISMATCH: instrument %u\n", loc);
         }
     std::printf("  %u instruments, full-band depth compare: %s\n\n",
-                kInstruments, bad ? "FAIL" : "all identical — PASS");
+                kInstruments, bad ? "FAIL" : "all identical - PASS");
     if (bad) return 1;
 
     // ---- 2. demux fan-out scaling ------------------------------------------
@@ -301,7 +301,7 @@ int main() {
     }
 
     // ---- 3. multi-channel scaling ------------------------------------------
-    std::printf("\n[4] Multi-channel scaling (per-shard feeds, no demux — venue-style)\n");
+    std::printf("\n[4] Multi-channel scaling (per-shard feeds, no demux - venue-style)\n");
     std::printf("  %3s | %9s | %8s\n", "W", "M msgs/s", "speedup");
     for (unsigned w : ws) {
         // offline split: channel w gets instruments where locate % W == w

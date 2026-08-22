@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/book.hpp — Phase 2: the core engine.
+// lob/book.hpp - Phase 2: the core engine.
 //
 //   PriceLevel      24-byte aggregate + FIFO queue head/tail (pool indices).
 //   BookSide<IsBid> flat tick-indexed ladder + occupancy bitmap + cached best.
@@ -8,11 +8,11 @@
 //
 // Why a flat ladder instead of std::map<price, Level>:
 // * price → level is `levels_[price - base_]`: one subtract, one load. A
-//   red-black tree is O(log n) with a dependent-load pointer chase per node —
+//   red-black tree is O(log n) with a dependent-load pointer chase per node;
 //   each hop is a likely cache miss and the hops cannot overlap in the
 //   pipeline. On a 5-deep tree that's ~5 serialized misses vs our 1.
-// * Adjacent prices are adjacent in memory. The inside of the book — where
-//   90% of traffic lands — occupies a handful of cache lines that simply
+// * Adjacent prices are adjacent in memory. The inside of the book, where
+//   90% of traffic lands, occupies a handful of cache lines that simply
 //   stay resident in L1.
 // * (*) The only non-O(1) moment is re-discovering the best price after the
 //   inside level empties. The occupancy bitmap makes that a tzcnt/lzcnt over
@@ -33,7 +33,7 @@
 namespace lob {
 
 // --------------------------------------------------------------------------
-// PriceLevel — aggregate view (this IS the L2 data) + intrusive FIFO queue.
+// PriceLevel - aggregate view (this IS the L2 data) + intrusive FIFO queue.
 // 24 bytes; the fields an L2 consumer reads (total_qty, count) lead the
 // struct so a depth snapshot touches the fewest lines.
 // --------------------------------------------------------------------------
@@ -54,7 +54,7 @@ struct BBO {
 };
 
 // --------------------------------------------------------------------------
-// BookSide — one half of the ladder. IsBid is a template parameter so the
+// BookSide - one half of the ladder. IsBid is a template parameter so the
 // "better price" comparison and bitmap scan direction are resolved at
 // compile time; the generated code for each side is branch-free on side.
 // --------------------------------------------------------------------------
@@ -147,7 +147,7 @@ private:
 };
 
 // --------------------------------------------------------------------------
-// LimitOrderBook — the venue-facing API. One instrument per instance
+// LimitOrderBook - the venue-facing API. One instrument per instance
 // (standard practice: symbols shard across book instances, never threads
 // within one book).
 // --------------------------------------------------------------------------
@@ -191,7 +191,7 @@ public:
         unlink_and_free(oi);
     }
 
-    // ---- Replace (ITCH 'U'): cancel old, add new — new id, LOSES priority -
+    // ---- Replace (ITCH 'U'): cancel old, add new - new id, LOSES priority -
     LOB_FORCE_INLINE void replace(uint64_t old_id, uint64_t new_id,
                                   int32_t price, uint32_t qty) {
         uint32_t oi = idmap_.find(old_id);

@@ -1,4 +1,4 @@
-# Build outputs — reproduce with ./build.ps1 (or the g++ line in the README)
+# Build outputs - reproduce with ./build.ps1 (or the g++ line in the README)
 *.exe
 *.o
 *.obj

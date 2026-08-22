@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/itch.hpp — Phase 3: NASDAQ ITCH 5.0 feed handler (zero-copy).
+// lob/itch.hpp - Phase 3: NASDAQ ITCH 5.0 feed handler (zero-copy).
 //
 // Wire facts:
 // * Every ITCH message is fixed-size and starts with a 1-byte type code.
@@ -17,7 +17,7 @@
 // Aliasing note: casting char* → struct* is formally UB under strict
 // aliasing; in practice every HFT shop does exactly this on x86 where
 // unaligned loads are free, and packed structs force byte-granular access.
-// The fully-portable alternative — memcpy into a local struct — compiles to
+// The fully-portable alternative (memcpy into a local struct) compiles to
 // the *same* instructions on GCC/Clang -O2; use it if you need to satisfy
 // UBSan. We keep the cast for clarity of intent.
 // ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ namespace lob::itch {
 
 #pragma pack(push, 1)
 
-// 'A' — Add Order (no MPID). 36 bytes.
+// 'A' - Add Order (no MPID). 36 bytes.
 struct AddOrder {
     char     type;             // 'A'
     uint16_t stock_locate;
@@ -44,14 +44,14 @@ struct AddOrder {
 };
 static_assert(sizeof(AddOrder) == 36);
 
-// 'F' — Add Order with MPID attribution. 40 bytes.
+// 'F' - Add Order with MPID attribution. 40 bytes.
 struct AddOrderMPID {
     AddOrder base;
     char     mpid[4];
 };
 static_assert(sizeof(AddOrderMPID) == 40);
 
-// 'E' — Order Executed. 31 bytes.
+// 'E' - Order Executed. 31 bytes.
 struct OrderExecuted {
     char     type;             // 'E'
     uint16_t stock_locate;
@@ -63,7 +63,7 @@ struct OrderExecuted {
 };
 static_assert(sizeof(OrderExecuted) == 31);
 
-// 'C' — Order Executed With Price. 36 bytes.
+// 'C' - Order Executed With Price. 36 bytes.
 struct OrderExecutedPrice {
     OrderExecuted base;
     char     printable;        // 'Y'/'N'
@@ -71,7 +71,7 @@ struct OrderExecutedPrice {
 };
 static_assert(sizeof(OrderExecutedPrice) == 36);
 
-// 'X' — Order Cancel (partial). 23 bytes.
+// 'X' - Order Cancel (partial). 23 bytes.
 struct OrderCancel {
     char     type;             // 'X'
     uint16_t stock_locate;
@@ -82,7 +82,7 @@ struct OrderCancel {
 };
 static_assert(sizeof(OrderCancel) == 23);
 
-// 'D' — Order Delete. 19 bytes.
+// 'D' - Order Delete. 19 bytes.
 struct OrderDelete {
     char     type;             // 'D'
     uint16_t stock_locate;
@@ -92,7 +92,7 @@ struct OrderDelete {
 };
 static_assert(sizeof(OrderDelete) == 19);
 
-// 'U' — Order Replace. 35 bytes.
+// 'U' - Order Replace. 35 bytes.
 struct OrderReplace {
     char     type;             // 'U'
     uint16_t stock_locate;
@@ -165,7 +165,7 @@ LOB_FORCE_INLINE size_t dispatch(LimitOrderBook& book, const uint8_t* p) {
 }
 
 // --------------------------------------------------------------------------
-// FeedHandler — dispatches one instrument's messages into a LimitOrderBook.
+// FeedHandler - dispatches one instrument's messages into a LimitOrderBook.
 // --------------------------------------------------------------------------
 class FeedHandler {
 public:

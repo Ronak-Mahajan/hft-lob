@@ -1,4 +1,4 @@
-# Build script — finds g++ (PATH first, then the WinGet WinLibs install) and
+# Build script: finds g++ (PATH first, then the WinGet WinLibs install) and
 # compiles the benchmark. Usage:  .\build.ps1 [-Run]
 param([switch]$Run)
 

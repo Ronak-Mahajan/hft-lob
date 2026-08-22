@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/order_pool.hpp — Phase 1: the memory architecture.
+// lob/order_pool.hpp - Phase 1: the memory architecture.
 //
 //   Order       32-byte POD, exactly two per 64-byte cache line.
 //   OrderPool   slab allocator: one up-front allocation, O(1) alloc/free via
@@ -13,7 +13,7 @@
 // * Pool indices (u32), never pointers. Half the width of a pointer, which is
 //   what gets Order down to 32 bytes; also relocation- and snapshot-safe.
 // * Field order inside Order is deliberate: the cancel path touches
-//   {qty, prev, next, level_idx} — all co-resident with id in one line, so an
+//   {qty, prev, next, level_idx}, all co-resident with id in one line, so an
 //   unlink costs a single L1 line, not a scatter of misses.
 // * The free list is intrusive: a dead order's own `next` field is the link.
 //   Freeing is two stores; the pool carries zero per-slot metadata.
@@ -22,7 +22,7 @@
 // * OrderIdMap: 16-byte slots → 4 per cache line. At load ≤ 0.5 a probe
 //   sequence almost never leaves its first line. Erase uses backward-shift
 //   (Knuth 6.4R), so there are no tombstones and probe lengths never decay
-//   over a trading day — critical for a process that runs 6.5 hours without
+//   over a trading day: critical for a process that runs 6.5 hours without
 //   a rehash.
 // ---------------------------------------------------------------------------
 #include <cstring>
@@ -35,7 +35,7 @@ namespace lob {
 enum class Side : uint8_t { Bid = 0, Ask = 1 };
 
 // --------------------------------------------------------------------------
-// Order — 32 bytes, POD.
+// Order - 32 bytes, POD.
 // --------------------------------------------------------------------------
 struct Order {
     uint64_t id;         // exchange order reference number
@@ -51,7 +51,7 @@ static_assert(sizeof(Order) == 32, "two orders per cache line");
 static_assert(alignof(Order) == 8);
 
 // --------------------------------------------------------------------------
-// OrderPool — pre-allocated slab, O(1) alloc/free, zero critical-path malloc.
+// OrderPool - pre-allocated slab, O(1) alloc/free, zero critical-path malloc.
 // --------------------------------------------------------------------------
 class OrderPool {
 public:
@@ -86,7 +86,7 @@ private:
 };
 
 // --------------------------------------------------------------------------
-// OrderIdMap — order id (u64, nonzero) → pool index (u32).
+// OrderIdMap - order id (u64, nonzero) → pool index (u32).
 // Fixed capacity (power of two), no rehash, no allocation after construction.
 // --------------------------------------------------------------------------
 class OrderIdMap {
@@ -151,8 +151,8 @@ private:
     static constexpr uint64_t kEmpty = 0;   // ITCH order refs are nonzero
 
     // Fibonacci hashing: multiply by 2^64/φ, keep the top bits. Cheap (one
-    // imul) and mixes sequential exchange order refs — which are nearly
-    // consecutive integers — across the whole table.
+    // imul) and mixes sequential exchange order refs - which are nearly
+    // consecutive integers - across the whole table.
     LOB_FORCE_INLINE uint64_t ideal(uint64_t key) const {
         return (key * 0x9E3779B97F4A7C15ull) >> shift_;
     }

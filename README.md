@@ -86,7 +86,7 @@ The binary self-verifies before benchmarking:
 
 - One instrument per `LimitOrderBook` (standard sharding unit). Multi-symbol =
   `stock_locate → book` table in front of the handler.
-- Prices are integer cents inside a configurable band (default $0.01–$1310.72,
+- Prices are integer cents inside a configurable band (default $0.01-$1310.72,
   3 MB of ladder per side). Out-of-band adds are dropped, as a prod handler
   would route them to a slow path.
 - The book does not match crossing orders; it is a *reconstructor*, and crossings

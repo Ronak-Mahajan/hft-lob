@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/common.hpp — platform shims: byte order, timestamps, branch hints.
+// lob/common.hpp - platform shims: byte order, timestamps, branch hints.
 // C++20, header-only. No allocation, no exceptions on any path in this file.
 // ---------------------------------------------------------------------------
 #include <bit>
@@ -54,7 +54,7 @@ static_assert(std::endian::native == std::endian::little,
 
 // --- cycle counter ----------------------------------------------------------
 // rdtsc: ~7ns read, constant-rate (invariant TSC) on anything post-Nehalem.
-// rdtscp additionally serializes prior loads/stores — use it for the *end*
+// rdtscp additionally serializes prior loads/stores - use it for the *end*
 // timestamp so the measured op cannot drift past the read.
 #if defined(__x86_64__) || defined(_M_X64)
 LOB_FORCE_INLINE uint64_t rdtsc_begin() {

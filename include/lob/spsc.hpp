@@ -1,11 +1,11 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/spsc.hpp — Phase 5: wait-free single-producer/single-consumer ring.
+// lob/spsc.hpp - Phase 5: wait-free single-producer/single-consumer ring.
 //
 // Why SPSC and not a Disruptor-style MPMC or a mutex queue: the demux thread
 // is the only producer for a given shard and the shard worker is the only
 // consumer. With exactly one writer per index, correctness needs nothing but
-// acquire/release *loads and stores* — no CAS, no RMW, no lock. Both sides
+// acquire/release *loads and stores*: no CAS, no RMW, no lock. Both sides
 // are wait-free (the producer's "full" case spins in the caller, by policy).
 //
 // False-sharing architecture (the whole point of this file):
@@ -21,13 +21,13 @@
 // Each region is isolated on a 128-byte boundary, not 64: Intel's L2
 // spatial prefetcher pulls cache lines in *pairs*, so two hot variables in
 // adjacent 64B lines still ping-pong between cores ("destructive
-// interference" — the same reason std::hardware_destructive_interference_size
+// interference", the same reason std::hardware_destructive_interference_size
 // is 128 on some x86 targets).
 //
 // Index-caching trick (the big coherence win): the producer only needs the
 // consumer's head to detect "full". Instead of loading the shared atomic
-// every push — which would drag head_'s line across the interconnect at
-// message rate — it works from a private cached copy and refreshes it only
+// every push, which would drag head_'s line across the interconnect at
+// message rate, it works from a private cached copy and refreshes it only
 // when the ring *appears* full. Symmetrically for the consumer and tail_.
 // Steady state: each side touches the other's line ~once per ring lap, not
 // once per message.
@@ -45,7 +45,7 @@ inline constexpr size_t kIsolate = 128;
 
 // One ITCH message per slot, one slot per cache line. Largest message we
 // carry ('F', 40B) fits with room; fixed size keeps consumer access purely
-// sequential — the hardware prefetcher streams the ring like an array.
+// sequential - the hardware prefetcher streams the ring like an array.
 struct alignas(64) MsgSlot {
     uint16_t len;
     uint8_t  data[62];
@@ -77,11 +77,11 @@ public:
 
     // ---- consumer side ----------------------------------------------------
     // Drain visible slots, invoking f(const MsgSlot&) on each. One head_
-    // publication per BATCH, not per message — coherence traffic amortizes
+    // publication per BATCH, not per message - coherence traffic amortizes
     // over the burst. Batches are capped: publishing head at most every
     // kMaxBatch messages keeps the producer's view of free space fresh.
     // (Uncapped draining of a full ring stalls the producer for the entire
-    // batch — head-of-line blocking that serializes the whole pipeline when
+    // batch - head-of-line blocking that serializes the whole pipeline when
     // consumers are the bottleneck.) Returns messages consumed (0 = empty).
     static constexpr uint64_t kMaxBatch = 256;
 

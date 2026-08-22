@@ -1,16 +1,16 @@
 // ---------------------------------------------------------------------------
-// main.cpp — Phase 4: verification & benchmarking.
+// main.cpp - Phase 4: verification & benchmarking.
 //
-// 1. Deterministic unit checks     — FIFO priority, BBO transitions, replace.
-// 2. Differential fuzz             — N million random ITCH messages through
+// 1. Deterministic unit checks      - FIFO priority, BBO transitions, replace.   (plain hyphen on all four rows; alignment preserved)
+// 2. Differential fuzz             - N million random ITCH messages through
 //    BOTH the optimized book and a naive std::map reference book; BBO
 //    compared after every message, full depth compared periodically.
 //    The reference is slow but obviously correct; divergence = bug.
-// 3. Latency microbench            — per-op rdtscp-serialized cycles for
+// 3. Latency microbench            - per-op rdtscp-serialized cycles for
 //    add / cancel, timer overhead subtracted, percentiles reported.
 //    (Serialization inflates absolute numbers; the batched wall-clock
 //    average below is the fair throughput figure. Both are printed.)
-// 4. End-to-end throughput         — binary ITCH stream through FeedHandler.
+// 4. End-to-end throughput         - binary ITCH stream through FeedHandler.
 // ---------------------------------------------------------------------------
 #include <algorithm>
 #include <chrono>
@@ -110,7 +110,7 @@ static void print_percentiles(const char* label, std::vector<uint32_t>& s,
 }
 
 // ============================================================================
-// Reference book: std::map + std::unordered_map. Deliberately naive — its
+// Reference book: std::map + std::unordered_map. Deliberately naive - its
 // only job is to be OBVIOUSLY correct so divergence indicts the fast book.
 // ============================================================================
 class RefBook {
@@ -417,7 +417,7 @@ static void differential_fuzz(size_t n_msgs) {
         }
     }
     CHECK(mismatches == 0, "differential fuzz");
-    std::printf("  %zu messages, %zu mismatches — %s\n\n", gen.ops.size(),
+    std::printf("  %zu messages, %zu mismatches - %s\n\n", gen.ops.size(),
                 mismatches, mismatches == 0 ? "PASS" : "FAIL");
 }
 
@@ -444,7 +444,7 @@ static void latency_bench(double cpn) {
         px[i]  = sd[i] ? kMid + 1 + depth : kMid - 1 - depth;
         qt[i]  = 1 + rng.below(500);
     }
-    // Random cancellation order — the realistic (cache-hostile) case.
+    // Random cancellation order - the realistic (cache-hostile) case.
     std::vector<uint64_t> kill = ids;
     for (size_t i = N - 1; i > 0; --i)
         std::swap(kill[i], kill[rng.below(static_cast<uint32_t>(i + 1))]);
@@ -474,7 +474,7 @@ static void latency_bench(double cpn) {
     print_percentiles("add   (1M live)", s_add, cpn);
     print_percentiles("cancel(random)",  s_del, cpn);
 
-    // Batched (unserialized) wall-clock averages — the honest throughput number.
+    // Batched (unserialized) wall-clock averages - the honest throughput number.
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
     for (size_t i = 0; i < N; ++i)
@@ -522,7 +522,7 @@ static void throughput_bench(size_t n_msgs) {
 int main() {
     pin_and_boost();
     double cpn = cycles_per_ns();
-    std::printf("=== L2 Limit Order Book — verification & benchmarks ===\n");
+    std::printf("=== L2 Limit Order Book - verification & benchmarks ===\n");
     std::printf("TSC: %.2f cycles/ns  |  sizeof(Order)=%zu  sizeof(PriceLevel)=%zu\n\n",
                 cpn, sizeof(Order), sizeof(PriceLevel));
 
