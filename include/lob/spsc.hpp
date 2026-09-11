@@ -61,7 +61,12 @@ public:
     SpscRing() : buf_(new MsgSlot[N]) {}          // startup-only allocation
 
     // ---- producer side ----------------------------------------------------
+    // `len` must fit the slot payload (62 bytes; the largest ITCH 5.0 message
+    // is 50). A longer message would overwrite the next slot's header, so it
+    // is a fatal invariant violation here; the demux drops and counts such
+    // messages before they reach the ring, and this assert is the backstop.
     LOB_FORCE_INLINE bool try_push(const uint8_t* msg, uint16_t len) {
+        LOB_ASSERT(len <= sizeof(MsgSlot::data), "SpscRing: message exceeds slot");
         uint64_t t = ptail_;
         if (LOB_UNLIKELY(t - phead_cache_ >= N)) {         // looks full:
             phead_cache_ = head_.load(std::memory_order_acquire);  // refresh
