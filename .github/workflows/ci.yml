@@ -1,0 +1,101 @@
+name: ci
+on:
+  push:
+    branches: ['**']
+  pull_request:
+permissions:
+  contents: write
+jobs:
+  test:
+    # Correctness legs only. Every leg is a single-TU compile with the same
+    # -std=c++20 -O2 -Wall -Wextra -pthread line (plus the leg's sanitizer
+    # flags) and runs the binaries in --quick mode: every unit check, the
+    # differential fuzz (A/F/E/C/X/D/U vs the std::map reference), the
+    # parallel-vs-sequential depth verification and the sequence-checked
+    # SPSC stress all run at reduced message counts. The throughput and
+    # latency figures these runs print are CI-runner numbers and are NOT the
+    # measurements in the README; CI verifies correctness, not throughput.
+    # Ubuntu compilers are pinned to the versions the ubuntu-24.04 image
+    # ships; the Windows leg uses whatever MinGW g++ windows-latest
+    # preinstalls (its version is printed).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-gcc
+            os: ubuntu-24.04
+            cxx: g++-13
+            flags: ""
+            targets: all
+          - name: ubuntu-clang
+            os: ubuntu-24.04
+            cxx: clang++-18
+            flags: ""
+            targets: all
+          - name: ubuntu-gcc-asan-ubsan
+            os: ubuntu-24.04
+            cxx: g++-13
+            flags: "-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g"
+            targets: all
+          - name: ubuntu-gcc-tsan
+            os: ubuntu-24.04
+            cxx: g++-13
+            flags: "-fsanitize=thread -fno-omit-frame-pointer -g"
+            targets: spsc
+          - name: windows-mingw-gcc
+            os: windows-latest
+            cxx: g++
+            flags: ""
+            targets: all
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: lower ASLR entropy for the sanitizer runtimes
+        # Newer kernels default to 32 bits of mmap randomness, which the
+        # gcc-13 ASan/TSan runtimes cannot map their shadow memory around.
+        if: contains(matrix.flags, 'sanitize')
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+      - name: build and run
+        shell: bash
+        env:
+          CXX: ${{ matrix.cxx }}
+          EXTRA: ${{ matrix.flags }}
+          TARGETS: ${{ matrix.targets }}
+        # `run` aborts the whole group on the first failure: inside a
+        # `{ ... } | tee` pipeline bash ignores errexit, so without it a
+        # failed compile would be masked by a later successful command.
+        run: |
+          run() { echo "+ $*"; "$@" || exit 1; }
+          CXXFLAGS="-std=c++20 -O2 -Wall -Wextra -pthread"
+          {
+            run "$CXX" --version
+            nproc 2>/dev/null || true
+            if [ "$TARGETS" = all ]; then
+              run "$CXX" $CXXFLAGS $EXTRA -I include src/main.cpp          -o lob_bench
+              run "$CXX" $CXXFLAGS $EXTRA -I include src/parallel_main.cpp -o lob_parallel
+            fi
+            run "$CXX" $CXXFLAGS $EXTRA -I include src/spsc_stress.cpp -o spsc_stress
+            if [ "$TARGETS" = all ]; then
+              run ./lob_bench --quick
+              run ./lob_parallel --quick
+            fi
+            run ./spsc_stress
+          } 2>&1 | tee -a ci.log; exit ${PIPESTATUS[0]}
+      - name: commit failure log
+        if: failure() && github.ref != 'refs/heads/main'
+        shell: bash
+        run: |
+          mkdir -p .ci
+          out=".ci/last-failure-test-${{ matrix.name }}.log"
+          if [ -f ci.log ]; then tail -c 60000 ci.log > "$out"; else echo "no ci.log captured (failed before the build step)" > "$out"; fi
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git add .ci
+          git commit -m "ci: failure log [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin "$GITHUB_REF_NAME" && git push origin "HEAD:$GITHUB_REF_NAME"; then exit 0; fi
+            sleep $((i * 5))
+          done
+          exit 1
