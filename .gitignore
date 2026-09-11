@@ -1,4 +1,11 @@
-# Build outputs - reproduce with ./build.ps1 (or the g++ line in the README)
+# Build outputs - reproduce with ./build.ps1 (or the g++ lines in the README)
 *.exe
 *.o
 *.obj
+/lob_bench
+/lob_parallel
+/spsc_stress
+ci.log
+
+# Local tooling
+.venv/
