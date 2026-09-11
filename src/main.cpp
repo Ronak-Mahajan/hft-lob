@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // main.cpp - Phase 4: verification & benchmarking.
 //
-// 1. Deterministic unit checks      - FIFO priority, BBO transitions, replace.   (plain hyphen on all four rows; alignment preserved)
+// 1. Deterministic unit checks      - FIFO priority, BBO transitions, replace.
 // 2. Differential fuzz             - N million random ITCH messages through
 //    BOTH the optimized book and a naive std::map reference book; BBO
 //    compared after every message, full depth compared periodically.
@@ -11,10 +11,17 @@
 //    (Serialization inflates absolute numbers; the batched wall-clock
 //    average below is the fair throughput figure. Both are printed.)
 // 4. End-to-end throughput         - binary ITCH stream through FeedHandler.
+//
+// Usage:  lob_bench [--quick]
+//   --quick  CI mode: smaller message counts (fuzz 250k, latency 100k,
+//            throughput 1M) so the whole run finishes in seconds. Every
+//            correctness check still runs; only the benchmark sizes shrink,
+//            and the numbers it prints are not the README's measurements.
 // ---------------------------------------------------------------------------
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -188,7 +195,7 @@ private:
 // decoded op list (so the reference book can replay identical semantics).
 // ============================================================================
 struct Op {
-    char     type;      // A E X D U
+    char     type;      // A F E C X D U
     uint64_t id, id2;
     int32_t  price;
     uint32_t qty;
@@ -200,7 +207,12 @@ public:
     explicit MockItch(uint64_t seed) : rng_(seed) {}
 
     // Generate n messages; realistic-ish mix, prices clustered at the inside.
-    void generate(size_t n, uint32_t max_live) {
+    // `variants`: also emit the attributed/priced twins of add and execute
+    // ('F' Add Order with MPID, 'C' Order Executed with Price) so every
+    // dispatch branch is exercised. Off by default so the benchmark streams
+    // stay byte-identical to the ones the recorded measurements used.
+    void generate(size_t n, uint32_t max_live, bool variants = false) {
+        variants_ = variants;
         bytes.reserve(n * 40);
         ops.reserve(n);
         for (size_t i = 0; i < n; ++i) {
@@ -268,13 +280,16 @@ private:
         char    side  = (rng_.next() & 1) ? 'B' : 'S';
         int32_t price = pick_price(side);
         uint32_t qty  = 1 + rng_.below(500);
-        header('A', 36);
+        // 'F' is 'A' plus a 4-byte MPID; book semantics are identical.
+        bool mpid = variants_ && (rng_.next() & 1);
+        header(mpid ? 'F' : 'A', mpid ? 40 : 36);
         p64(id); p8(static_cast<uint8_t>(side)); p32(qty);
         pstr("MOCK    ", 8);
         p32(static_cast<uint32_t>(price) * 100);   // ticks → 1/10000 $
+        if (mpid) pstr("MPID", 4);
         gen_[id] = {price, qty, side, static_cast<uint32_t>(live_.size())};
         live_.push_back(id);
-        ops.push_back({'A', id, 0, price, qty, side});
+        ops.push_back({mpid ? 'F' : 'A', id, 0, price, qty, side});
     }
     void emit_delete() {
         uint64_t id = pick_live();
@@ -286,8 +301,13 @@ private:
         uint64_t id = pick_live();
         Gen& g = gen_[id];
         uint32_t d = 1 + rng_.below(g.qty);        // may fully consume
-        header('E', 31); p64(id); p32(d); p64(++match_);
-        ops.push_back({'E', id, 0, 0, d, 0});
+        // 'C' is 'E' plus printable flag + execution price; the resting
+        // order is reduced by the same shares either way.
+        bool priced = variants_ && (rng_.next() & 1);
+        header(priced ? 'C' : 'E', priced ? 36 : 31);
+        p64(id); p32(d); p64(++match_);
+        if (priced) { p8('Y'); p32(static_cast<uint32_t>(g.price) * 100); }
+        ops.push_back({priced ? 'C' : 'E', id, 0, 0, d, 0});
         if (d >= g.qty) drop_live(id); else g.qty -= d;
     }
     void emit_cancel() {
@@ -319,13 +339,18 @@ private:
     std::vector<uint64_t> live_;
     uint64_t next_id_ = 0, match_ = 0, ts_ = 0;
     int32_t  mid_ = kMid;
+    bool     variants_ = false;
 };
 
+// The reference treats 'F' exactly as 'A' and 'C' exactly as 'E': the MPID
+// and execution price carry no book-state information at L2.
 static void apply_to_ref(RefBook& ref, const Op& op) {
     switch (op.type) {
-    case 'A': ref.add(op.id, op.side == 'B' ? Side::Bid : Side::Ask,
+    case 'A':
+    case 'F': ref.add(op.id, op.side == 'B' ? Side::Bid : Side::Ask,
                       op.price, op.qty);                          break;
-    case 'E': ref.reduce_or_remove(op.id, op.qty);                break;
+    case 'E':
+    case 'C': ref.reduce_or_remove(op.id, op.qty);                break;
     case 'X': ref.reduce_or_remove(op.id, op.qty);                break;
     case 'D': ref.remove(op.id);                                  break;
     case 'U': ref.replace(op.id, op.id2, op.price, op.qty);       break;
@@ -378,10 +403,16 @@ static void unit_checks() {
 // 2. Differential fuzz vs reference book
 // ============================================================================
 static void differential_fuzz(size_t n_msgs) {
-    std::printf("[2] Differential fuzz: %zu random ITCH messages vs std::map reference\n",
-                n_msgs);
+    std::printf("[2] Differential fuzz: %zu random ITCH messages (A/F/E/C/X/D/U) "
+                "vs std::map reference\n", n_msgs);
     MockItch gen(0xC0FFEEull);
-    gen.generate(n_msgs, 100'000);
+    gen.generate(n_msgs, 100'000, /*variants=*/true);
+    size_t n_by_type[256] = {};
+    for (const Op& op : gen.ops) ++n_by_type[static_cast<uint8_t>(op.type)];
+    std::printf("  mix: A %zu  F %zu  E %zu  C %zu  X %zu  D %zu  U %zu\n",
+                n_by_type['A'], n_by_type['F'], n_by_type['E'], n_by_type['C'],
+                n_by_type['X'], n_by_type['D'], n_by_type['U']);
+    CHECK(n_by_type['F'] > 0 && n_by_type['C'] > 0, "fuzz stream exercises F and C");
 
     LimitOrderBook book(kBaseTick, kBand, kMaxOrders, kIdMapLog2);
     itch::FeedHandler fh(book);
@@ -391,7 +422,7 @@ static void differential_fuzz(size_t n_msgs) {
     size_t mismatches = 0;
     for (size_t i = 0; i < gen.ops.size(); ++i) {
         uint16_t len = static_cast<uint16_t>((p[0] << 8) | p[1]);
-        fh.on_message(p + 2);
+        fh.on_message(p + 2, len);                 // length-validated path
         p += 2 + len;
         apply_to_ref(ref, gen.ops[i]);
 
@@ -417,16 +448,66 @@ static void differential_fuzz(size_t n_msgs) {
         }
     }
     CHECK(mismatches == 0, "differential fuzz");
-    std::printf("  %zu messages, %zu mismatches - %s\n\n", gen.ops.size(),
+    CHECK(fh.bad_length() == 0, "no bad-length messages in a well-formed stream");
+    std::printf("  %zu messages, %zu mismatches - %s\n", gen.ops.size(),
                 mismatches, mismatches == 0 ? "PASS" : "FAIL");
+    std::printf("  counters: out-of-band drops %llu | bad-length %llu | live orders %llu\n",
+                (unsigned long long)book.dropped_out_of_band(),
+                (unsigned long long)fh.bad_length(),
+                (unsigned long long)book.live_orders());
+
+    // Corrupt-frame check: a modeled type with the wrong length prefix must
+    // be refused and counted, never parsed. Take the first message of the
+    // stream (a 36- or 40-byte add) and claim it is one byte shorter.
+    {
+        LimitOrderBook b2(kBaseTick, kBand, 1u << 12, 14);
+        itch::FeedHandler fh2(b2);
+        const uint8_t* m = gen.bytes.data() + 2;
+        uint16_t len = static_cast<uint16_t>((gen.bytes[0] << 8) | gen.bytes[1]);
+        size_t consumed = fh2.on_message(m, static_cast<uint16_t>(len - 1));
+        CHECK(consumed == 0 && fh2.bad_length() == 1 && b2.live_orders() == 0,
+              "bad-length frame refused and counted");
+        consumed = fh2.on_message(m, len);
+        CHECK(consumed == len && b2.live_orders() == 1, "correct length parses");
+    }
+
+    // Reference-implementation comparison (timing only; the stream is the one
+    // just verified). The std::map + std::unordered_map reference replays the
+    // decoded op list; the flat book replays the wire bytes and therefore
+    // also pays for ITCH parsing. Single run, this machine, this synthetic
+    // stream: a baseline for the "rejected alternative" column of the README
+    // table, not a headline number.
+    {
+        using clock = std::chrono::steady_clock;
+        const double n = static_cast<double>(gen.ops.size());
+        RefBook ref2;
+        auto r0 = clock::now();
+        for (const Op& op : gen.ops) apply_to_ref(ref2, op);
+        auto r1 = clock::now();
+        LimitOrderBook book2(kBaseTick, kBand, kMaxOrders, kIdMapLog2);
+        itch::FeedHandler fh2(book2);
+        auto f0 = clock::now();
+        fh2.on_stream(gen.bytes.data(), gen.bytes.size());
+        auto f1 = clock::now();
+        double ref_ns  = std::chrono::duration<double, std::nano>(r1 - r0).count() / n;
+        double fast_ns = std::chrono::duration<double, std::nano>(f1 - f0).count() / n;
+        BBO qa = ref2.bbo(), qb = book2.bbo();
+        CHECK(qa.bid_price == qb.bid_price && qa.ask_price == qb.ask_price,
+              "timed replays end in the same BBO");
+        std::printf("  reference std::map book: %.1f ns/msg | flat book (incl. parsing): "
+                    "%.1f ns/msg | ratio %.1fx\n"
+                    "  (reference-implementation comparison on this stream, "
+                    "single run; not a headline number)\n\n",
+                    ref_ns, fast_ns, fast_ns > 0 ? ref_ns / fast_ns : 0.0);
+    }
 }
 
 // ============================================================================
 // 3. Latency microbench (per-op, serialized) + batched averages
 // ============================================================================
-static void latency_bench(double cpn) {
-    std::printf("[3] Latency microbench (rdtscp-serialized per op, overhead-subtracted)\n");
-    const size_t N = 1'000'000;
+static void latency_bench(double cpn, size_t N) {
+    std::printf("[3] Latency microbench (rdtscp-serialized per op, overhead-subtracted, "
+                "%zu ops)\n", N);
     uint64_t ovh = timer_overhead();
     std::printf("  timer pair overhead: %.0f ns (subtracted)\n",
                 static_cast<double>(ovh) / cpn);
@@ -471,7 +552,7 @@ static void latency_bench(double cpn) {
         uint64_t d = t1 - t0;
         s_del[i] = static_cast<uint32_t>(d > ovh ? d - ovh : 0);
     }
-    print_percentiles("add   (1M live)", s_add, cpn);
+    print_percentiles(N >= 1'000'000 ? "add   (1M live)" : "add",  s_add, cpn);
     print_percentiles("cancel(random)",  s_del, cpn);
 
     // Batched (unserialized) wall-clock averages - the honest throughput number.
@@ -514,22 +595,38 @@ static void throughput_bench(size_t n_msgs) {
                 secs * 1e9 / static_cast<double>(done));
 
     BBO q = book.bbo();
-    std::printf("  final book: bid %d x %llu | ask %d x %llu\n\n",
+    std::printf("  final book: bid %d x %llu | ask %d x %llu\n",
                 q.bid_price, (unsigned long long)q.bid_qty,
                 q.ask_price, (unsigned long long)q.ask_qty);
+    CHECK(done == gen.ops.size(), "every framed message consumed");
+    CHECK(fh.bad_length() == 0, "no bad-length messages in a well-formed stream");
+    std::printf("  counters: out-of-band drops %llu | bad-length %llu | live orders %llu\n\n",
+                (unsigned long long)book.dropped_out_of_band(),
+                (unsigned long long)fh.bad_length(),
+                (unsigned long long)book.live_orders());
 }
 
-int main() {
+int main(int argc, char** argv) {
+    bool quick = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--quick") == 0) quick = true;
+        else {
+            std::printf("usage: %s [--quick]\n", argv[0]);
+            return 2;
+        }
+    }
+
     pin_and_boost();
     double cpn = cycles_per_ns();
-    std::printf("=== L2 Limit Order Book - verification & benchmarks ===\n");
+    std::printf("=== L2 Limit Order Book - verification & benchmarks%s ===\n",
+                quick ? " (--quick: CI sizes, not a measurement)" : "");
     std::printf("TSC: %.2f cycles/ns  |  sizeof(Order)=%zu  sizeof(PriceLevel)=%zu\n\n",
                 cpn, sizeof(Order), sizeof(PriceLevel));
 
     unit_checks();
-    differential_fuzz(2'000'000);
-    latency_bench(cpn);
-    throughput_bench(10'000'000);
+    differential_fuzz(quick ? 250'000 : 2'000'000);
+    latency_bench(cpn, quick ? 100'000 : 1'000'000);
+    throughput_bench(quick ? 1'000'000 : 10'000'000);
 
     if (g_failures) { std::printf("*** %d FAILURE(S) ***\n", g_failures); return 1; }
     std::printf("All verification passed.\n");
