@@ -98,11 +98,18 @@ public:
           slots_(uint64_t{1} << capacity_log2)   // zero-initialized: key 0 = empty
     {}
 
+    // Full-table guard: with at least one empty slot the probe loop must
+    // terminate; without one it would spin forever. The live count is kept
+    // exact by insert/erase, so the check is one compare on the hot path.
+    // The intended operating point is load <= 0.5 (see LimitOrderBook's
+    // constructor check that pool capacity <= idmap capacity / 2).
     LOB_FORCE_INLINE void insert(uint64_t key, uint32_t val) {
+        LOB_ASSERT(size_ <= mask_, "OrderIdMap full");
         uint64_t i = ideal(key);
         while (slots_[i].key != kEmpty) i = (i + 1) & mask_;
         slots_[i].key = key;
         slots_[i].val = val;
+        ++size_;
     }
 
     // Returns NIL if absent.
@@ -139,7 +146,11 @@ public:
             }
         }
         slots_[hole].key = kEmpty;
+        --size_;
     }
+
+    uint64_t size()     const { return size_; }       // live keys
+    uint64_t capacity() const { return mask_ + 1; }   // slots
 
 private:
     struct Slot {
@@ -160,6 +171,7 @@ private:
     unsigned shift_;
     uint64_t mask_;
     std::vector<Slot> slots_;
+    uint64_t size_ = 0;
 };
 
 } // namespace lob

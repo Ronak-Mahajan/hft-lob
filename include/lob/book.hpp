@@ -163,12 +163,22 @@ public:
           idmap_(idmap_log2),
           bids_(band, pool_),
           asks_(band, pool_)
-    {}
+    {
+        // The id map must stay at load <= 0.5 when every pool slot is live:
+        // that is what keeps probe sequences short and, together with the
+        // full-table guard in OrderIdMap::insert, what makes OrderPool's
+        // "exhausted" assert the one that fires first.
+        LOB_ASSERT(idmap_log2 >= 1 && idmap_log2 <= 40, "idmap_log2 out of range");
+        LOB_ASSERT(uint64_t{max_live_orders} <= (uint64_t{1} << idmap_log2) / 2,
+                   "pool capacity must be <= idmap capacity / 2");
+    }
 
     // ---- Add ------------------------------------------------------------
+    // Out-of-band prices are dropped and counted (see dropped_out_of_band());
+    // a production handler would route them to a slow path instead.
     LOB_FORCE_INLINE void add(uint64_t id, Side side, int32_t price, uint32_t qty) {
         uint32_t li = static_cast<uint32_t>(price - base_);
-        if (LOB_UNLIKELY(li >= band_)) return;    // outside band: drop (prod: log)
+        if (LOB_UNLIKELY(li >= band_)) { ++dropped_out_of_band_; return; }
         uint32_t oi = pool_.alloc();
         Order& o = pool_[oi];
         o.id = id; o.qty = qty; o.price = price;
@@ -232,6 +242,14 @@ public:
         return oi == NIL ? nullptr : &pool_[oi];
     }
 
+    // Adds (including the add half of a replace) whose price fell outside
+    // [base, base + band) and were therefore dropped. Their later E/X/D/U
+    // messages are also ignored (unknown id). 0 on a stream within band.
+    uint64_t dropped_out_of_band() const { return dropped_out_of_band_; }
+
+    // Live orders currently resting in the book.
+    uint64_t live_orders() const { return idmap_.size(); }
+
 private:
     // Shared body of Execute / partial Cancel. The partial-reduce branch is
     // the common case at the inside and touches only the order (already hot
@@ -262,6 +280,7 @@ private:
     OrderIdMap      idmap_;
     BookSide<true>  bids_;
     BookSide<false> asks_;
+    uint64_t        dropped_out_of_band_ = 0;
 };
 
 } // namespace lob

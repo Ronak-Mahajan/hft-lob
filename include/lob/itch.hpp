@@ -22,6 +22,8 @@
 // UBSan. We keep the cast for clarity of intent.
 // ---------------------------------------------------------------------------
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
 
 #include "book.hpp"
 #include "common.hpp"
@@ -113,10 +115,35 @@ LOB_FORCE_INLINE int32_t price_to_ticks(uint32_t wire_be) {
     return static_cast<int32_t>(be32(wire_be) / 100);
 }
 
+// Per-type expected wire length for every message type this build models.
+// 0 = not modeled (system/admin messages), which the callers skip by the
+// stream's length prefix. dispatch_checked() compares the prefix against
+// this table BEFORE any reinterpret_cast, so a truncated or corrupt message
+// can never be read past its own bytes.
+constexpr uint16_t expected_len(uint8_t type) {
+    switch (static_cast<char>(type)) {
+    case 'A': return static_cast<uint16_t>(sizeof(AddOrder));
+    case 'F': return static_cast<uint16_t>(sizeof(AddOrderMPID));
+    case 'E': return static_cast<uint16_t>(sizeof(OrderExecuted));
+    case 'C': return static_cast<uint16_t>(sizeof(OrderExecutedPrice));
+    case 'X': return static_cast<uint16_t>(sizeof(OrderCancel));
+    case 'D': return static_cast<uint16_t>(sizeof(OrderDelete));
+    case 'U': return static_cast<uint16_t>(sizeof(OrderReplace));
+    default:  return 0;
+    }
+}
+static_assert(expected_len('A') == 36 && expected_len('F') == 40 &&
+              expected_len('E') == 31 && expected_len('C') == 36 &&
+              expected_len('X') == 23 && expected_len('D') == 19 &&
+              expected_len('U') == 35 && expected_len('S') == 0);
+
 // Handle one message against a book. `p` points at the type byte. Returns
 // the message length consumed, 0 if the type is unknown (caller resyncs).
 // Free function so both the single-book FeedHandler and the sharded parallel
 // engine share one dispatch implementation.
+//
+// UNCHECKED: trusts the type byte and reads sizeof(struct) bytes. Use only
+// when the caller has already validated the length (see dispatch_checked).
 LOB_FORCE_INLINE size_t dispatch(LimitOrderBook& book, const uint8_t* p) {
     switch (static_cast<char>(*p)) {
     case 'A': {
@@ -164,6 +191,21 @@ LOB_FORCE_INLINE size_t dispatch(LimitOrderBook& book, const uint8_t* p) {
     }
 }
 
+// Validated dispatch: `msg_len` is the wire length prefix of the message at
+// `p`. A modeled type whose prefix disagrees with expected_len() is NOT
+// parsed; it is counted in `bad_length` and 0 is returned so the caller
+// skips it by prefix. Unknown types return 0 without counting (they are
+// legal ITCH, just not modeled). Cost on the hot path: one table lookup and
+// one predictable compare.
+LOB_FORCE_INLINE size_t dispatch_checked(LimitOrderBook& book, const uint8_t* p,
+                                         uint16_t msg_len, uint64_t& bad_length) {
+    if (LOB_UNLIKELY(msg_len == 0)) { ++bad_length; return 0; }
+    uint16_t want = expected_len(*p);
+    if (want == 0) return 0;                       // not modeled: skip
+    if (LOB_UNLIKELY(msg_len != want)) { ++bad_length; return 0; }
+    return dispatch(book, p);
+}
+
 // --------------------------------------------------------------------------
 // FeedHandler - dispatches one instrument's messages into a LimitOrderBook.
 // --------------------------------------------------------------------------
@@ -171,31 +213,43 @@ class FeedHandler {
 public:
     explicit FeedHandler(LimitOrderBook& book) : book_(book) {}
 
+    // Unchecked single message (caller has validated the length).
     LOB_FORCE_INLINE size_t on_message(const uint8_t* p) {
         return dispatch(book_, p);
     }
 
+    // Length-validated single message; `msg_len` is the stream prefix.
+    LOB_FORCE_INLINE size_t on_message(const uint8_t* p, uint16_t msg_len) {
+        return dispatch_checked(book_, p, msg_len, bad_length_);
+    }
+
     // Consume a length-prefixed stream (ITCH file format / MoldUDP payload):
-    // [u16 BE length][message] repeated. Returns messages processed.
+    // [u16 BE length][message] repeated. Returns messages processed (every
+    // framed message counts, including skipped and bad-length ones).
     size_t on_stream(const uint8_t* buf, size_t len) {
         size_t n = 0;
         const uint8_t* p   = buf;
         const uint8_t* end = buf + len;
         while (p + 2 <= end) {
             uint16_t msg_len;
-            __builtin_memcpy(&msg_len, p, 2);
+            std::memcpy(&msg_len, p, 2);
             msg_len = be16(msg_len);
             p += 2;
-            if (LOB_UNLIKELY(p + msg_len > end)) break;   // truncated tail
-            on_message(p);
+            if (LOB_UNLIKELY(static_cast<size_t>(end - p) < msg_len)) break;  // truncated tail
+            on_message(p, msg_len);
             p += msg_len;
             ++n;
         }
         return n;
     }
 
+    // Messages of a modeled type whose length prefix did not match the
+    // per-type table (never parsed, skipped by prefix). 0 on a clean feed.
+    uint64_t bad_length() const { return bad_length_; }
+
 private:
     LimitOrderBook& book_;
+    uint64_t        bad_length_ = 0;
 };
 
 } // namespace lob::itch
