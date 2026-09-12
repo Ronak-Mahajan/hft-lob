@@ -23,6 +23,7 @@
 // that will hammer them. Per-worker message counters are 128B-padded.
 // ---------------------------------------------------------------------------
 #include <atomic>
+#include <chrono>
 #include <latch>
 #include <memory>
 #include <thread>
@@ -38,16 +39,31 @@
     #define NOMINMAX
   #endif
   #include <windows.h>
+#elif defined(__linux__)
+  #include <pthread.h>
+  #include <sched.h>
 #endif
 
 namespace lob {
 
-inline void pin_current_thread(unsigned cpu) {
+// Pin the calling thread to one logical CPU. Best effort: a cpu index the
+// host does not have (e.g. a 23-worker configuration on a 4-vCPU CI runner)
+// is ignored and the thread stays unpinned. Returns true if the pin took.
+inline bool pin_current_thread(unsigned cpu) {
 #ifdef _WIN32
-    SetThreadAffinityMask(GetCurrentThread(), DWORD_PTR{1} << cpu);
+    if (cpu >= 64) return false;
+    DWORD_PTR ok = SetThreadAffinityMask(GetCurrentThread(), DWORD_PTR{1} << cpu);
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+    return ok != 0;
+#elif defined(__linux__)
+    if (cpu >= CPU_SETSIZE) return false;
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET(cpu, &set);
+    return pthread_setaffinity_np(pthread_self(), sizeof(set), &set) == 0;
 #else
-    (void)cpu;   // linux: pthread_setaffinity_np
+    (void)cpu;   // other platforms: no pinning
+    return false;
 #endif
 }
 
@@ -88,7 +104,16 @@ public:
         while (p + 2 <= end) {
             uint16_t mlen = static_cast<uint16_t>((p[0] << 8) | p[1]);
             const uint8_t* msg = p + 2;
-            if (LOB_UNLIKELY(msg + mlen > end)) break;
+            if (LOB_UNLIKELY(static_cast<size_t>(end - msg) < mlen)) break;
+            // Frame sanity before the ring: a message must carry at least
+            // type + stock_locate (3 bytes) and fit one 62-byte slot (the
+            // largest ITCH 5.0 message is 50). Anything else is a corrupt
+            // prefix; it is skipped by prefix and counted, never pushed.
+            if (LOB_UNLIKELY(mlen < 3 || mlen > sizeof(MsgSlot::data))) {
+                ++demux_bad_length_;
+                p += 2 + mlen;
+                continue;
+            }
             // stock_locate sits at bytes 1..2 of every order message - the
             // demux never decodes more than that.
             uint16_t locate = static_cast<uint16_t>((msg[1] << 8) | msg[2]);
@@ -107,10 +132,27 @@ public:
     const LimitOrderBook* book(uint16_t locate) const { return books_[locate].get(); }
     uint64_t processed(unsigned w) const { return counts_[w].v; }
 
+    // Messages a worker refused because the length prefix did not match
+    // the per-type table (itch::expected_len). 0 on a clean feed.
+    uint64_t bad_length(unsigned w) const { return counts_[w].bad_len; }
+    // Frames the demux skipped for being too short or too long for a slot.
+    uint64_t demux_bad_length() const { return demux_bad_length_; }
+    // Totals across every worker and the demux.
+    uint64_t bad_length_total() const {
+        uint64_t s = demux_bad_length_;
+        for (unsigned w = 0; w < W_; ++w) s += counts_[w].bad_len;
+        return s;
+    }
+    uint64_t dropped_out_of_band_total() const {
+        uint64_t s = 0;
+        for (const auto& b : books_) if (b) s += b->dropped_out_of_band();
+        return s;
+    }
+
 private:
     using Ring = SpscRing<14>;            // 16384 slots × 64B = 1 MB/shard
 
-    struct alignas(kIsolate) PaddedU64 { uint64_t v = 0; };
+    struct alignas(kIsolate) PaddedU64 { uint64_t v = 0; uint64_t bad_len = 0; };
 
     void worker_main(unsigned wid, std::latch& ready, std::atomic<bool>& done) {
         pin_current_thread(wid + 1);
@@ -125,10 +167,11 @@ private:
 
         Ring& ring = *rings_[wid];
         uint64_t n_done = 0;
+        uint64_t bad_len = 0;
         auto handle = [&](const MsgSlot& s) {
             uint16_t locate = static_cast<uint16_t>((s.data[1] << 8) | s.data[2]);
             if (LOB_LIKELY(locate >= 1 && locate <= n_inst_))
-                itch::dispatch(*books_[locate], s.data);
+                itch::dispatch_checked(*books_[locate], s.data, s.len, bad_len);
         };
         unsigned idle = 0;
         for (;;) {
@@ -151,6 +194,7 @@ private:
             if (idle < 6) ++idle;
         }
         counts_[wid].v = n_done;
+        counts_[wid].bad_len = bad_len;
     }
 
     unsigned   W_;
@@ -159,6 +203,7 @@ private:
     std::vector<std::unique_ptr<Ring>>           rings_;
     std::vector<std::unique_ptr<LimitOrderBook>> books_;
     std::vector<PaddedU64>                       counts_;
+    uint64_t   demux_bad_length_ = 0;
 };
 
 } // namespace lob
