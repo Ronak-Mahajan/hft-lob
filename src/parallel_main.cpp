@@ -11,9 +11,16 @@
 //    NASDAQ actually distributes ITCH across parallel MoldUDP channels),
 //    each worker ingesting its own channel; measures aggregate book
 //    throughput without a demux bottleneck.
+//
+// Usage:  lob_parallel [--quick]
+//   --quick  CI mode: a 2M-message stream instead of 16M and at most 4
+//            workers, so the verification finishes in seconds on a 4-vCPU
+//            runner. The scaling tables it prints are not measurements.
 // ---------------------------------------------------------------------------
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <latch>
 #include <thread>
 #include <unordered_map>
@@ -29,7 +36,8 @@ static constexpr BookConfig kCfg = {
     /*max_live_orders*/ 1u << 15, /*idmap_log2*/ 16,
 };
 static constexpr uint16_t kInstruments = 128;
-static constexpr size_t   kMessages    = 16'000'000;
+static constexpr size_t   kMessages    = 16'000'000;   // full run (README)
+static constexpr size_t   kQuickMessages = 2'000'000;  // --quick (CI)
 static constexpr uint32_t kMaxLivePerInst = 20'000;
 
 struct SplitMix64 {
@@ -174,6 +182,7 @@ private:
 // ============================================================================
 struct SequentialMarket {
     std::vector<std::unique_ptr<LimitOrderBook>> books;
+    uint64_t bad_length = 0;
 
     explicit SequentialMarket(uint16_t n_inst) : books(size_t{n_inst} + 1) {
         for (uint16_t i = 1; i <= n_inst; ++i)
@@ -187,14 +196,20 @@ struct SequentialMarket {
         while (p + 2 <= end) {
             uint16_t mlen = static_cast<uint16_t>((p[0] << 8) | p[1]);
             const uint8_t* msg = p + 2;
-            if (msg + mlen > end) break;
+            if (static_cast<size_t>(end - msg) < mlen) break;
+            if (mlen < 3) { ++bad_length; p += 2 + mlen; continue; }
             uint16_t locate = static_cast<uint16_t>((msg[1] << 8) | msg[2]);
             if (locate >= 1 && locate < books.size())
-                itch::dispatch(*books[locate], msg);
+                itch::dispatch_checked(*books[locate], msg, mlen, bad_length);
             p += 2 + mlen;
         }
         auto t1 = std::chrono::steady_clock::now();
         return std::chrono::duration<double>(t1 - t0).count();
+    }
+    uint64_t dropped_out_of_band_total() const {
+        uint64_t s = 0;
+        for (const auto& b : books) if (b) s += b->dropped_out_of_band();
+        return s;
     }
 };
 
@@ -213,11 +228,11 @@ static bool books_equal(const LimitOrderBook& a, const LimitOrderBook& b) {
 // parallel MoldUDP channels); each worker ingests its own channel directly.
 // ============================================================================
 static double multichannel_run(const std::vector<std::vector<uint8_t>>& chans,
-                               uint16_t n_inst) {
+                               uint16_t n_inst, uint64_t& bad_length_out) {
     unsigned W = static_cast<unsigned>(chans.size());
     std::latch ready(static_cast<ptrdiff_t>(W) + 1);
     std::vector<std::thread> threads;
-    std::atomic<double> unused{0};
+    std::vector<uint64_t> bad_len(W, 0);     // written by one worker each
     threads.reserve(W);
     for (unsigned w = 0; w < W; ++w) {
         threads.emplace_back([&, w] {
@@ -230,17 +245,21 @@ static double multichannel_run(const std::vector<std::vector<uint8_t>>& chans,
                         kCfg.base_tick, kCfg.band, kCfg.max_live_orders,
                         kCfg.idmap_log2);
             ready.arrive_and_wait();
+            uint64_t bad = 0;
             const auto& ch = chans[w];
             const uint8_t* p = ch.data();
             const uint8_t* end = p + ch.size();
             while (p + 2 <= end) {
                 uint16_t mlen = static_cast<uint16_t>((p[0] << 8) | p[1]);
                 const uint8_t* msg = p + 2;
-                if (msg + mlen > end) break;
+                if (static_cast<size_t>(end - msg) < mlen) break;
+                if (mlen < 3) { ++bad; p += 2 + mlen; continue; }
                 uint16_t locate = static_cast<uint16_t>((msg[1] << 8) | msg[2]);
-                itch::dispatch(*books[locate], msg);
+                if (locate >= 1 && locate <= n_inst && books[locate])
+                    itch::dispatch_checked(*books[locate], msg, mlen, bad);
                 p += 2 + mlen;
             }
+            bad_len[w] = bad;
         });
     }
     pin_current_thread(0);
@@ -248,34 +267,54 @@ static double multichannel_run(const std::vector<std::vector<uint8_t>>& chans,
     auto t0 = std::chrono::steady_clock::now();
     for (auto& t : threads) t.join();
     auto t1 = std::chrono::steady_clock::now();
-    (void)unused;
+    for (uint64_t b : bad_len) bad_length_out += b;
     return std::chrono::duration<double>(t1 - t0).count();
 }
 
-int main() {
+int main(int argc, char** argv) {
+    bool quick = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--quick") == 0) quick = true;
+        else {
+            std::printf("usage: %s [--quick]\n", argv[0]);
+            return 2;
+        }
+    }
 #ifdef _WIN32
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 #endif
+    const size_t n_messages = quick ? kQuickMessages : kMessages;
     unsigned hw = std::thread::hardware_concurrency();
     unsigned max_workers = hw > 1 ? hw - 1 : 1;   // core 0 reserved for demux
-    std::printf("=== Phase 5: sharded multi-core market engine ===\n");
+    if (quick) max_workers = std::min(max_workers, 4u);
+    std::printf("=== Phase 5: sharded multi-core market engine%s ===\n",
+                quick ? " (--quick: CI sizes, not a measurement)" : "");
     std::printf("hardware threads: %u | instruments: %u | messages: %zu\n\n",
-                hw, kInstruments, kMessages);
+                hw, kInstruments, n_messages);
 
-    std::printf("generating %zu-message market stream...\n", kMessages);
+    std::printf("generating %zu-message market stream...\n", n_messages);
     MarketMock mock(0x5EEDF00Dull, kInstruments);
-    mock.generate(kMessages);
+    mock.generate(n_messages);
     std::printf("stream: %.1f MB\n\n", static_cast<double>(mock.bytes.size()) / 1e6);
 
     // ---- 1. sequential baseline + parallel verification --------------------
     std::printf("[1] Sequential baseline (1 thread, %u books)\n", kInstruments);
     SequentialMarket seq(kInstruments);
     double t_seq = seq.run(mock.bytes.data(), mock.bytes.size());
-    double seq_rate = static_cast<double>(kMessages) / t_seq / 1e6;
-    std::printf("  %.3f s  →  %.1f M msgs/s\n\n", t_seq, seq_rate);
+    double seq_rate = static_cast<double>(n_messages) / t_seq / 1e6;
+    std::printf("  %.3f s  →  %.1f M msgs/s\n", t_seq, seq_rate);
+    std::printf("  counters: out-of-band drops %llu | bad-length %llu\n\n",
+                (unsigned long long)seq.dropped_out_of_band_total(),
+                (unsigned long long)seq.bad_length);
 
-    std::printf("[2] Parallel-vs-sequential differential verification (W=8)\n");
-    ParallelEngine verify_eng(8, kInstruments, kCfg);
+    // W=8 is the recorded configuration; --quick caps it at the worker budget
+    // (hardware threads minus the demux core, at most 4), because spinning
+    // workers oversubscribing a 4-vCPU runner would only slow the check down
+    // without testing anything extra.
+    const unsigned verify_w = quick ? std::min(8u, std::max(2u, max_workers)) : 8u;
+    std::printf("[2] Parallel-vs-sequential differential verification (W=%u)\n",
+                verify_w);
+    ParallelEngine verify_eng(verify_w, kInstruments, kCfg);
     verify_eng.run(mock.bytes.data(), mock.bytes.size());
     size_t bad = 0;
     for (uint16_t loc = 1; loc <= kInstruments; ++loc)
@@ -283,6 +322,23 @@ int main() {
             ++bad;
             std::printf("  MISMATCH: instrument %u\n", loc);
         }
+    uint64_t par_processed = 0;
+    for (unsigned w = 0; w < verify_w; ++w) par_processed += verify_eng.processed(w);
+    if (par_processed != n_messages) {
+        ++bad;
+        std::printf("  MISMATCH: workers processed %llu of %zu messages\n",
+                    (unsigned long long)par_processed, n_messages);
+    }
+    if (verify_eng.bad_length_total() != seq.bad_length ||
+        verify_eng.dropped_out_of_band_total() != seq.dropped_out_of_band_total()) {
+        ++bad;
+        std::printf("  MISMATCH: counters differ (bad-length %llu vs %llu, "
+                    "drops %llu vs %llu)\n",
+                    (unsigned long long)verify_eng.bad_length_total(),
+                    (unsigned long long)seq.bad_length,
+                    (unsigned long long)verify_eng.dropped_out_of_band_total(),
+                    (unsigned long long)seq.dropped_out_of_band_total());
+    }
     std::printf("  %u instruments, full-band depth compare: %s\n\n",
                 kInstruments, bad ? "FAIL" : "all identical - PASS");
     if (bad) return 1;
@@ -296,7 +352,7 @@ int main() {
     for (unsigned w : ws) {
         ParallelEngine eng(w, kInstruments, kCfg);
         double secs = eng.run(mock.bytes.data(), mock.bytes.size());
-        double rate = static_cast<double>(kMessages) / secs / 1e6;
+        double rate = static_cast<double>(n_messages) / secs / 1e6;
         std::printf("  %3u | %9.1f | %7.2fx\n", w, rate, rate / seq_rate);
     }
 
@@ -312,15 +368,18 @@ int main() {
         while (p + 2 <= end) {
             uint16_t mlen = static_cast<uint16_t>((p[0] << 8) | p[1]);
             const uint8_t* msg = p + 2;
-            if (msg + mlen > end) break;
+            if (static_cast<size_t>(end - msg) < mlen) break;
+            if (mlen < 3) { p += 2 + mlen; continue; }   // unroutable frame
             uint16_t locate = static_cast<uint16_t>((msg[1] << 8) | msg[2]);
             auto& c = chans[locate % w];
             c.insert(c.end(), p, msg + mlen);
             p += 2 + mlen;
         }
-        double secs = multichannel_run(chans, kInstruments);
-        double rate = static_cast<double>(kMessages) / secs / 1e6;
-        std::printf("  %3u | %9.1f | %7.2fx\n", w, rate, rate / seq_rate);
+        uint64_t bad_length = 0;
+        double secs = multichannel_run(chans, kInstruments, bad_length);
+        double rate = static_cast<double>(n_messages) / secs / 1e6;
+        std::printf("  %3u | %9.1f | %7.2fx%s\n", w, rate, rate / seq_rate,
+                    bad_length ? "  (bad-length frames seen!)" : "");
     }
 
     std::printf("\ndone.\n");

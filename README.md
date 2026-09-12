@@ -18,6 +18,10 @@ include/lob/engine.hpp      Phase 5: sharded multi-core engine (demux → rings
                             → pinned workers, locate % W sharding)
 src/parallel_main.cpp       Phase 5: parallel-vs-sequential verification +
                             scaling benchmarks
+src/spsc_stress.cpp         Phase 5: sequence-checked SPSC ring stress (the
+                            ThreadSanitizer target in CI)
+.github/workflows/ci.yml    g++ / clang++ / MinGW builds, ASan+UBSan and
+                            TSan legs (correctness only, see Reproducibility)
 ```
 
 ## Architecture decisions
@@ -68,27 +72,88 @@ parallel MoldUDP channels), 23 workers measure **113-120M msgs/s aggregate**
 
 ## Build & run
 
+Three single-translation-unit binaries, no build system. Windows with
+MinGW-w64 g++ (`winget install BrechtSanders.WinLibs.POSIX.UCRT`;
+`.\build.ps1 [-Run] [-Quick]` runs these same lines):
+
 ```powershell
-g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -static `
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
     -I include src/main.cpp -o lob_bench.exe
-./lob_bench.exe
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
+    -I include src/parallel_main.cpp -o lob_parallel.exe
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
+    -I include src/spsc_stress.cpp -o spsc_stress.exe
+./lob_bench.exe       # unit checks, differential fuzz, latency percentiles, single-core throughput
+./lob_parallel.exe    # parallel-vs-sequential verification, multi-core scaling tables
+./spsc_stress.exe     # 2M sequence-checked messages through the SPSC ring
 ```
 
-The binary self-verifies before benchmarking:
+Linux with g++ >= 11 or clang++ >= 14 (`std::latch` needs libstdc++ 11+):
+
+```bash
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/main.cpp          -o lob_bench
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/parallel_main.cpp -o lob_parallel
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/spsc_stress.cpp   -o spsc_stress
+./lob_bench && ./lob_parallel && ./spsc_stress
+```
+
+`lob_bench` and `lob_parallel` accept `--quick` (the mode CI runs): every
+correctness check still runs, only the benchmark sizes shrink, and the
+numbers a `--quick` run prints are not measurements.
+
+`lob_bench` self-verifies before benchmarking:
 1. deterministic unit checks (FIFO priority, BBO transitions, replace semantics)
-2. **differential fuzz**: 2M random ITCH messages replayed simultaneously into
-   this book and a naive `std::map` reference; BBO compared after *every*
-   message, full depth audited every 50k
+2. **differential fuzz**: 2M random ITCH messages (`A`/`F`/`E`/`C`/`X`/`D`/`U`)
+   replayed simultaneously into this book and a naive `std::map` reference;
+   BBO compared after *every* message, full depth audited every 50k. A
+   corrupt-length frame must be refused and counted, never parsed. The
+   reference replay is then timed next to the flat book and the ratio
+   printed as a reference-implementation comparison on that stream
 3. per-op latency percentiles (`rdtscp`-serialized, timer overhead subtracted)
-4. end-to-end binary-stream throughput through the feed handler
+4. end-to-end binary-stream throughput through the feed handler, with the
+   out-of-band-drop / bad-length / live-order counters (all zero drops on a
+   well-formed in-band stream)
+
+`lob_parallel` runs the same multi-instrument stream through one thread and
+through the sharded engine and requires every instrument's full-band depth,
+the processed-message count and the drop / bad-length counters to agree
+before it prints any scaling table.
+
+## Reproducibility
+
+- **Where the numbers come from.** Every figure in *Phase 5* above is printed
+  by `lob_bench` (single-core, `src/main.cpp`) or `lob_parallel` (demux and
+  multi-channel scaling, `src/parallel_main.cpp`), built with the
+  `-O3 -march=native -DNDEBUG` lines in *Build & run* and run without
+  `--quick`. They are single-machine measurements on the Core Ultra 9 275HX
+  named above; the runs are recorded in the commit messages of `67d6b20`
+  (initial measurements) and `554bbd0` (ranges over six repeated idle runs).
+  No results file is committed: reproduce them by building and running on
+  your own hardware, and expect different absolute numbers.
+- **What CI verifies.** `.github/workflows/ci.yml` builds all three binaries
+  single-TU with `-std=c++20 -O2 -Wall -Wextra -pthread` on ubuntu (g++-13,
+  clang++-18) and Windows (MinGW g++) and runs `lob_bench --quick`,
+  `lob_parallel --quick` and `spsc_stress`; an ASan+UBSan leg runs the same
+  three, and a TSan leg runs `spsc_stress`. CI verifies **correctness**
+  (unit checks, differential fuzz, parallel-vs-sequential depth equality,
+  sanitizers, TSan) and **not throughput**: the msgs/s a shared 4-vCPU
+  runner prints under `--quick` are not measurements and are not the numbers
+  in this README.
+- **Guards that make a bad run loud.** A length prefix that disagrees with the
+  per-type ITCH table is refused before any cast and counted (`bad_length`);
+  out-of-band adds are counted (`dropped_out_of_band`); the id map asserts
+  instead of probing forever when full, the book asserts pool <= idmap / 2 at
+  construction, and the SPSC ring asserts that a message fits its slot. All
+  counters are printed at the end of every run and CI requires the
+  bad-length count to be zero.
 
 ## Notes & limits
 
 - One instrument per `LimitOrderBook` (standard sharding unit). Multi-symbol =
   `stock_locate → book` table in front of the handler.
 - Prices are integer cents inside a configurable band (default $0.01-$1310.72,
-  3 MB of ladder per side). Out-of-band adds are dropped, as a prod handler
-  would route them to a slow path.
+  3 MB of ladder per side). Out-of-band adds are dropped and counted, as a
+  prod handler would route them to a slow path.
 - The book does not match crossing orders; it is a *reconstructor*, and crossings
   are resolved by the venue and arrive as Execute messages, per ITCH semantics.
 - Latency outliers (max ≈ 100 µs) are OS preemption; on a tuned host you'd pin
