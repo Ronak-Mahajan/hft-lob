@@ -2,14 +2,16 @@
 
 A production-style Level 2 order book reconstructor for NASDAQ ITCH 5.0:
 O(1) add / cancel / execute / replace, zero dynamic allocation and zero locks
-on the critical path, ~10M messages/second end-to-end on one core of the
-machine named in *Phase 5*.
+on the critical path. On a **synthetic** ITCH 5.0 feed, end-to-end single-core
+throughput measures **4.2-10.6M messages/second** across the two machines
+benchmarked in *Phase 5*.
 
-Every benchmark below runs on a **synthetic** ITCH 5.0 stream generated
-in-process by the mock feed in `src/`; this repo contains no recorded NASDAQ
-data. Throughput is a property of the host as much as of the code - a second
-machine measured about half the single-core rate (*Phase 5*) - so read the
-figures as one host's, not as a spec.
+The feed is generated in-process by the mock in `src/`; this repo contains no
+recorded NASDAQ data, and every number below comes from that generated stream.
+Throughput is a property of the host as much as of the code - the slower of
+the two machines measures about half the faster one's single-core rate, and
+both vary run to run - so read the figures as measurements on the two named
+machines, not as a spec.
 
 ## Layout
 
@@ -65,14 +67,16 @@ Key mechanics (`spsc.hpp`):
   Shared state and taxes every producer push with an RFO
 - 64-byte message slots: one line per message, hardware-prefetch friendly
 
-What "lock-free" means here, precisely: nothing in this repo takes a mutex,
-and the ring's `try_push` / `try_pop` are wait-free - each finishes in a
-bounded number of steps with no retry loop inside the operation. The book
-itself is not a concurrent data structure at all; it is **single-writer**,
-which is why it needs no synchronization and why sharding by `stock_locate`
-is what makes it scale. The pipeline as a whole is *not* non-blocking: the
-rings are bounded, so a full ring makes the demux spin until its worker
-drains it. `spsc_stress` prints that full-stall count on every run.
+**Scope of the concurrency claim**, because "lock-free" is used loosely in
+this corner of the field. Nothing in this repo takes a mutex, and the ring's
+`try_push` / `consume_batch` are wait-free - each finishes in a bounded number
+of steps with no retry loop inside the operation. The book itself is not a
+lock-free data structure and does not try to be: it is **single-writer**,
+which is why it needs no synchronization at all, and sharding by
+`stock_locate` is what makes it scale. The pipeline as a whole is *not*
+non-blocking: the rings are bounded, so a full ring makes the demux spin
+until its worker drains it. `spsc_stress` prints that full-stall count on
+every run, and it is not small.
 
 Verification: the same generated 16M-message / 128-instrument stream is run
 through the parallel engine (8 workers) and a single thread; **the full-band
@@ -83,7 +87,8 @@ sharding invariant).
 Measured on the **synthetic** stream above (Core Ultra 9 275HX, 8P+16E,
 Windows 11). Single core, end to end: 8.5-10.6M msgs/s across six idle runs
 (best recorded run: 13.8M; throughput is sensitive to turbo and DRAM
-contention, so the honest headline is 10M+). Single demux feeding 8 workers
+contention, so read 10M as this machine's round number, not as a floor
+anywhere else). Single demux feeding 8 workers
 reaches ~49M msgs/s, demux-bound beyond that. **Only with the feed pre-split
 per shard** - exactly how NASDAQ distributes ITCH across parallel MoldUDP
 channels, and the split is done offline, outside the timed region - do 23
@@ -91,9 +96,10 @@ workers measure **113-120M msgs/s aggregate** (best recorded run: 148M).
 Through a single demux thread, the same machine does not reach that figure.
 
 How much the host matters: on a second machine (Core Ultra 7 265H, 16 cores,
-Windows 11, other work running) the same binaries measure 5.0-6.4M msgs/s
-single core over four runs, 14-15M through a demux with 8 workers, and
-49-54M aggregate across 15 pre-split channels.
+Windows 11, other work running) the same binaries measure 4.2-6.4M msgs/s
+single core, 10.5-15M through a demux with 8 workers, and 40-54M aggregate
+across 15 pre-split channels. Those spans are repeated runs on a machine that
+was not idle; the low end of each is what a loaded laptop gives you.
 
 ## Build & run
 
@@ -133,8 +139,10 @@ numbers a `--quick` run prints are not measurements.
    printed mix) replayed simultaneously into this book and a naive
    `std::map` + `std::unordered_map` reference; the fast book reads the wire
    bytes through the length-validated dispatch, so the parser is on trial
-   too. BBO compared after *every* message; every price level in the whole
-   131072-tick band audited against the reference every 50k. A
+   too, while the reference replays the generator's decoded op list. BBO
+   compared after *every* one of the 2M messages; every price level in the
+   whole 131072-tick band audited against the reference every 50k messages
+   (40 full-band audits per run). A
    corrupt-length frame must be refused and counted, never parsed. The
    reference replay is then timed next to the flat book and the ratio
    printed as a reference-implementation comparison on that stream

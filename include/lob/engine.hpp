@@ -11,8 +11,9 @@
 //        ├── SpscRing ──► worker 1 (core 2)  owns books where locate%W == 1
 //        └── ...
 //
-// The correctness invariant that makes the books lock-free: ALL messages for
-// a given instrument land on ONE worker, and the ring is FIFO, so each book
+// The correctness invariant that lets the books stay single-writer, and so
+// need no locks and no atomics of their own: ALL messages for a given
+// instrument land on ONE worker, and the ring is FIFO, so each book
 // still sees its message stream in exchange order, and the single-writer
 // LimitOrderBook from Phase 2 is reused byte-for-byte, no atomics added.
 // Cross-instrument ordering is not preserved, and doesn't need to be (the
