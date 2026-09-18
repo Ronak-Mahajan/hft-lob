@@ -2,7 +2,14 @@
 
 A production-style Level 2 order book reconstructor for NASDAQ ITCH 5.0:
 O(1) add / cancel / execute / replace, zero dynamic allocation and zero locks
-on the critical path, ~10 M+ messages/second end-to-end on commodity hardware.
+on the critical path, ~10M messages/second end-to-end on one core of the
+machine named in *Phase 5*.
+
+Every benchmark below runs on a **synthetic** ITCH 5.0 stream generated
+in-process by the mock feed in `src/`; this repo contains no recorded NASDAQ
+data. Throughput is a property of the host as much as of the code - a second
+machine measured about half the single-core rate (*Phase 5*) - so read the
+figures as one host's, not as a spec.
 
 ## Layout
 
@@ -38,7 +45,7 @@ src/spsc_stress.cpp         Phase 5: sequence-checked SPSC ring stress (the
 | Parsing | `#pragma pack(1)` wire-mirror structs + `reinterpret_cast` + one `bswap` per field | field-by-field copy-out |
 | Threading | single writer per book (feed is inherently sequential); shard symbols across cores, SPSC queues at the edges | locks/atomics inside the book |
 
-## Phase 5: multi-core scale (lock-free sharding)
+## Phase 5: multi-core scale (single-writer shards, wait-free rings)
 
 Whole-market processing: a demux thread peeks `stock_locate` (2 bytes, no
 decode) and routes raw messages through wait-free SPSC rings to workers that
@@ -58,17 +65,35 @@ Key mechanics (`spsc.hpp`):
   Shared state and taxes every producer push with an RFO
 - 64-byte message slots: one line per message, hardware-prefetch friendly
 
-Verification: the same 16M-message / 128-instrument stream is run through the
-parallel engine and a single thread; **full-band depth of every instrument
-must be byte-identical** (proves the sharding invariant).
+What "lock-free" means here, precisely: nothing in this repo takes a mutex,
+and the ring's `try_push` / `try_pop` are wait-free - each finishes in a
+bounded number of steps with no retry loop inside the operation. The book
+itself is not a concurrent data structure at all; it is **single-writer**,
+which is why it needs no synchronization and why sharding by `stock_locate`
+is what makes it scale. The pipeline as a whole is *not* non-blocking: the
+rings are bounded, so a full ring makes the demux spin until its worker
+drains it. `spsc_stress` prints that full-stall count on every run.
 
-Measured (Core Ultra 9 275HX, 8P+16E, Windows 11). Single core, end to end:
-8.5-10.6M msgs/s across six idle runs (best recorded run: 13.8M; throughput is
-sensitive to turbo and DRAM contention, so the honest headline is 10M+).
-Single demux feeding 8 workers reaches ~49M msgs/s, demux-bound beyond that.
-With the feed pre-split per shard (exactly how NASDAQ distributes ITCH across
-parallel MoldUDP channels), 23 workers measure **113-120M msgs/s aggregate**
-(best recorded run: 148M).
+Verification: the same generated 16M-message / 128-instrument stream is run
+through the parallel engine (8 workers) and a single thread; **the full-band
+depth of every instrument must be identical**, level by level, along with the
+processed-message count and the drop / bad-length counters (proves the
+sharding invariant).
+
+Measured on the **synthetic** stream above (Core Ultra 9 275HX, 8P+16E,
+Windows 11). Single core, end to end: 8.5-10.6M msgs/s across six idle runs
+(best recorded run: 13.8M; throughput is sensitive to turbo and DRAM
+contention, so the honest headline is 10M+). Single demux feeding 8 workers
+reaches ~49M msgs/s, demux-bound beyond that. **Only with the feed pre-split
+per shard** - exactly how NASDAQ distributes ITCH across parallel MoldUDP
+channels, and the split is done offline, outside the timed region - do 23
+workers measure **113-120M msgs/s aggregate** (best recorded run: 148M).
+Through a single demux thread, the same machine does not reach that figure.
+
+How much the host matters: on a second machine (Core Ultra 7 265H, 16 cores,
+Windows 11, other work running) the same binaries measure 5.0-6.4M msgs/s
+single core over four runs, 14-15M through a demux with 8 workers, and
+49-54M aggregate across 15 pre-split channels.
 
 ## Build & run
 
@@ -103,9 +128,13 @@ numbers a `--quick` run prints are not measurements.
 
 `lob_bench` self-verifies before benchmarking:
 1. deterministic unit checks (FIFO priority, BBO transitions, replace semantics)
-2. **differential fuzz**: 2M random ITCH messages (`A`/`F`/`E`/`C`/`X`/`D`/`U`)
-   replayed simultaneously into this book and a naive `std::map` reference;
-   BBO compared after *every* message, full depth audited every 50k. A
+2. **differential fuzz**: 2M generated ITCH messages from a fixed seed
+   (`A`/`F`/`E`/`C`/`X`/`D`/`U`, all seven types present and counted in the
+   printed mix) replayed simultaneously into this book and a naive
+   `std::map` + `std::unordered_map` reference; the fast book reads the wire
+   bytes through the length-validated dispatch, so the parser is on trial
+   too. BBO compared after *every* message; every price level in the whole
+   131072-tick band audited against the reference every 50k. A
    corrupt-length frame must be refused and counted, never parsed. The
    reference replay is then timed next to the flat book and the ratio
    printed as a reference-implementation comparison on that stream
@@ -125,11 +154,13 @@ before it prints any scaling table.
   by `lob_bench` (single-core, `src/main.cpp`) or `lob_parallel` (demux and
   multi-channel scaling, `src/parallel_main.cpp`), built with the
   `-O3 -march=native -DNDEBUG` lines in *Build & run* and run without
-  `--quick`. They are single-machine measurements on the Core Ultra 9 275HX
-  named above; the runs are recorded in the commit messages of `67d6b20`
-  (initial measurements) and `554bbd0` (ranges over six repeated idle runs).
-  No results file is committed: reproduce them by building and running on
-  your own hardware, and expect different absolute numbers.
+  `--quick`, on the synthetic stream those binaries generate in-process: no
+  market data is read from disk, because none is distributed here. The first
+  measurements (13.8M single-core, 148M across 23 cores) are quoted in the
+  commit message of `67d6b20`; `554bbd0` replaced them in this README with
+  ranges over six repeated idle runs. No console log of those runs is
+  committed, so the ranges are as reproducible as your hardware makes them
+  and no further: build, run, and expect different absolute numbers.
 - **What CI verifies.** `.github/workflows/ci.yml` builds all three binaries
   single-TU with `-std=c++20 -O2 -Wall -Wextra -pthread` on ubuntu (g++-13,
   clang++-18) and Windows (MinGW g++) and runs `lob_bench --quick`,
@@ -141,9 +172,11 @@ before it prints any scaling table.
   in this README.
 - **Guards that make a bad run loud.** A length prefix that disagrees with the
   per-type ITCH table is refused before any cast and counted (`bad_length`);
-  out-of-band adds are counted (`dropped_out_of_band`); the id map asserts
-  instead of probing forever when full, the book asserts pool <= idmap / 2 at
-  construction, and the SPSC ring asserts that a message fits its slot. All
+  out-of-band adds are counted (`dropped_out_of_band`); the id map aborts
+  instead of probing forever when full, the book checks pool <= idmap / 2 at
+  construction, and the SPSC ring checks that a message fits its slot. Those
+  three are `LOB_ASSERT`, a branch to `std::abort()` that `-DNDEBUG` does
+  *not* compile out, so they hold in the release builds benchmarked here. All
   counters are printed at the end of every run and CI requires the
   bad-length count to be zero.
 
@@ -156,6 +189,9 @@ before it prints any scaling table.
   prod handler would route them to a slow path.
 - The book does not match crossing orders; it is a *reconstructor*, and crossings
   are resolved by the venue and arrive as Execute messages, per ITCH semantics.
-- Latency outliers (max ≈ 100 µs) are OS preemption; on a tuned host you'd pin
+- Latency outliers (the `max` column: tens to hundreds of microseconds on an
+  idle desktop, milliseconds on one doing other work) are OS preemption, not
+  book work - the p99 sits orders of magnitude below them. On a tuned host
+  you'd pin
   to an isolated core (`isolcpus`), disable SMT on that core, and use huge
   pages for the slab and ID map.

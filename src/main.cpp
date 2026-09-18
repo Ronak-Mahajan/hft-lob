@@ -436,8 +436,12 @@ static void differential_fuzz(size_t n_msgs) {
                             b.bid_price, (unsigned long long)b.bid_qty,
                             b.ask_price, (unsigned long long)b.ask_qty);
         }
-        if ((i % 50'000) == 49'999) {          // periodic full-depth audit
-            for (int32_t px = kMid - 400; px <= kMid + 400; ++px) {
+        if ((i % 50'000) == 49'999) {          // periodic full-band depth audit
+            // Every price in the configured band, not a window around the
+            // mid: a level that drifted outside a window would otherwise
+            // never be compared.
+            for (int32_t px = kBaseTick;
+                 px < kBaseTick + static_cast<int32_t>(kBand); ++px) {
                 if (book.level_at(Side::Bid, px) != ref.level_at(Side::Bid, px) ||
                     book.level_at(Side::Ask, px) != ref.level_at(Side::Ask, px)) {
                     ++mismatches;
