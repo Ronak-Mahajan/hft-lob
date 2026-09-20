@@ -594,7 +594,7 @@ static void throughput_bench(size_t n_msgs) {
     auto t1 = clock::now();
 
     double secs = std::chrono::duration<double>(t1 - t0).count();
-    std::printf("  %zu messages in %.3f s  →  %.1f M msgs/s  (%.1f ns/msg)\n",
+    std::printf("  %zu messages in %.3f s  ->  %.1f M msgs/s  (%.1f ns/msg)\n",
                 done, secs, static_cast<double>(done) / secs / 1e6,
                 secs * 1e9 / static_cast<double>(done));
 

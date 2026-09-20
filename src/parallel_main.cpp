@@ -302,7 +302,7 @@ int main(int argc, char** argv) {
     SequentialMarket seq(kInstruments);
     double t_seq = seq.run(mock.bytes.data(), mock.bytes.size());
     double seq_rate = static_cast<double>(n_messages) / t_seq / 1e6;
-    std::printf("  %.3f s  →  %.1f M msgs/s\n", t_seq, seq_rate);
+    std::printf("  %.3f s  ->  %.1f M msgs/s\n", t_seq, seq_rate);
     std::printf("  counters: out-of-band drops %llu | bad-length %llu\n\n",
                 (unsigned long long)seq.dropped_out_of_band_total(),
                 (unsigned long long)seq.bad_length);
