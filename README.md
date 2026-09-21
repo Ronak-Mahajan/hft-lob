@@ -170,12 +170,13 @@ for all ten.
 the same pre-scan and streams the same file in 256 MB chunks. Every figure
 here: the 265H laptop above, on AC power, Windows 11 on the Balanced power
 plan, with a browser and other everyday applications open; g++ 16.1.0,
-`-O3 -march=native -DNDEBUG`, binaries built from commit `d17968a`. Each run
-pins its thread (logical CPU 1, a P-core, unless stated) and raises the
-process to high priority. The raw console output of every run is a
-`results/perf_20190130_run_*.log` file, and
+`-O3 -march=native -DNDEBUG`, binaries built from commit `d17968a` unless a
+paragraph names another. Each run pins its thread (logical CPU 1, a P-core,
+unless stated) and raises the process to high priority. The raw console
+output of every run is a `results/perf_20190130_*.log` file, and
 [`results/perf_20190130.json`](results/perf_20190130.json) collects every
-number, generated from those logs by `tools/perf_json.pl`.
+number of the `d17968a` runs, generated from their logs by
+`tools/perf_json.pl`.
 
 **Single core, end to end.** Every message is framed, length-checked, routed
 to its `stock_locate` book and applied (`dispatch_segment()`, the loop
@@ -302,8 +303,9 @@ carries 1.24 times the mean load.
 both multi-core modes at every W) printed the book digest after each of the
 42 chunks, and every digest equals the one the differential run printed at
 the same point. Every run also ends with 0 bad-length messages, 0 dropped
-orders, 0 unknown order ids, and 196,611 adds in the overflow, as the
-pre-scan predicted.
+orders, 0 unknown order ids, and the number of adds in the overflow that its
+placement predicted (196,611 with the pre-scan placement, 98,102,140 with
+the first-add one).
 
 ## Architecture decisions
 
@@ -582,7 +584,10 @@ and is not redistributed here.
   the overflow.
 - `lob_replay` sizes its books from a pre-scan of the same file, which suits
   a historical replay. A live feed handler would size from the previous day
-  or a reserve, since it cannot read the day ahead.
+  or a reserve, since it cannot read the day ahead. How much the placement
+  matters is measured in *Recorded-day performance*: with each ladder at its
+  symbol's first add, fewer than half the day's adds land on a ladder and
+  the single-core rate falls from 9.02M to 4.04M messages/second.
 - The book does not match crossing orders; it is a *reconstructor*, and
   crossings are resolved by the venue and arrive as Execute messages, per ITCH
   semantics.
