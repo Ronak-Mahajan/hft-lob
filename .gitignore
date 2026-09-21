@@ -5,7 +5,15 @@
 /lob_bench
 /lob_parallel
 /spsc_stress
+/lob_replay
 ci.log
+
+# Market data is never committed: results/*manifest* names the source files,
+# their sizes and hashes instead.
+*.NASDAQ_ITCH50
+*.NASDAQ_ITCH50.gz
+*.itch
+*.itch.gz
 
 # Local tooling
 .venv/

@@ -19,13 +19,27 @@ namespace lob {
   #define LOB_LIKELY(x)   (__builtin_expect(!!(x), 1))
   #define LOB_UNLIKELY(x) (__builtin_expect(!!(x), 0))
   #define LOB_FORCE_INLINE inline __attribute__((always_inline))
+  #define LOB_COLD         __attribute__((noinline, cold))
 #else
   #define LOB_LIKELY(x)   (x)
   #define LOB_UNLIKELY(x) (x)
   #define LOB_FORCE_INLINE __forceinline
+  #define LOB_COLD         __declspec(noinline)
 #endif
 
 inline constexpr uint32_t NIL = 0xFFFFFFFFu;   // null pool/level index
+
+// --- high half of a 64x64-bit product (one mul/mulx on x86-64) --------------
+// Used for division by a per-book constant: with M = floor((2^64 - 1) / d) + 1
+// and d >= 2, mulhi64(M, n) == n / d exactly for every 32-bit n (Lemire,
+// Kaser & Kurz, "Faster Remainder by Direct Computation", 2019).
+LOB_FORCE_INLINE uint64_t mulhi64(uint64_t a, uint64_t b) {
+#if defined(_MSC_VER)
+    return __umulh(a, b);
+#else
+    return static_cast<uint64_t>((static_cast<unsigned __int128>(a) * b) >> 64);
+#endif
+}
 
 // --- big-endian → host (ITCH is big-endian; x86 is little-endian) ----------
 LOB_FORCE_INLINE uint16_t be16(uint16_t v) {

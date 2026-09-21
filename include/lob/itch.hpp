@@ -107,13 +107,85 @@ struct OrderReplace {
 };
 static_assert(sizeof(OrderReplace) == 35);
 
+// 'R' - Stock Directory. 39 bytes. Carries the symbol for a stock_locate.
+struct StockDirectory {
+    char     type;             // 'R'
+    uint16_t stock_locate;
+    uint16_t tracking;
+    uint8_t  timestamp[6];
+    char     stock[8];         // symbol, space padded
+    char     market_category;
+    char     financial_status;
+    uint32_t round_lot_size;
+    char     round_lots_only;
+    char     issue_classification;
+    char     issue_subtype[2];
+    char     authenticity;
+    char     short_sale_threshold;
+    char     ipo_flag;
+    char     luld_tier;
+    char     etp_flag;
+    uint32_t etp_leverage;
+    char     inverse;
+};
+static_assert(sizeof(StockDirectory) == 39);
+
+// 'Q' - Cross Trade. 40 bytes. One per opening / closing / halt cross.
+struct CrossTrade {
+    char     type;             // 'Q'
+    uint16_t stock_locate;
+    uint16_t tracking;
+    uint8_t  timestamp[6];
+    uint64_t shares;
+    char     stock[8];
+    uint32_t cross_price;      // 4 implied decimals
+    uint64_t match_number;
+    char     cross_type;       // 'O' opening, 'C' closing, 'H' halt/IPO, 'I' intraday
+};
+static_assert(sizeof(CrossTrade) == 40);
+
 #pragma pack(pop)
 
-// Wire price (1/10000 $) → book ticks (1 cent). Mock/real NASDAQ prices for
-// stocks ≥ $1 are always whole cents, so this divide is exact.
-LOB_FORCE_INLINE int32_t price_to_ticks(uint32_t wire_be) {
-    return static_cast<int32_t>(be32(wire_be) / 100);
+// 48-bit big-endian timestamp (nanoseconds since midnight) at bytes 5..10 of
+// every ITCH 5.0 message.
+LOB_FORCE_INLINE uint64_t timestamp_ns(const uint8_t* msg) {
+    uint64_t t = 0;
+    for (int i = 5; i < 11; ++i) t = (t << 8) | msg[i];
+    return t;
 }
+
+// Wire price (1/10000 $) -> whole-cent ticks, truncating. Exact only for
+// whole-cent prices: a sub-penny price (legal below $1.00) is merged into the
+// cent below it. The synthetic benchmark streams are whole-cent by
+// construction; recorded data goes through WireUnits instead.
+LOB_FORCE_INLINE Price price_to_ticks(uint32_t wire_be) {
+    return be32(wire_be) / 100;
+}
+
+// How dispatch() turns a wire price into a book price. CentTicks feeds the
+// benchmarks' cent-denominated books; WireUnits passes the exact wire price
+// ($0.0001) to books built in wire units, such as the real-day replay's.
+struct CentTicks {
+    static LOB_FORCE_INLINE Price convert(uint32_t wire_be) { return price_to_ticks(wire_be); }
+};
+struct WireUnits {
+    static LOB_FORCE_INLINE Price convert(uint32_t wire_be) { return be32(wire_be); }
+};
+
+// Length of every ITCH 5.0 message type in the specification, modeled or
+// not; 0 for a type byte the specification does not define.
+constexpr uint16_t spec_len(uint8_t type) {
+    switch (static_cast<char>(type)) {
+    case 'S': return 12; case 'R': return 39; case 'H': return 25; case 'Y': return 20;
+    case 'L': return 26; case 'V': return 35; case 'W': return 12; case 'K': return 28;
+    case 'J': return 35; case 'h': return 21; case 'A': return 36; case 'F': return 40;
+    case 'E': return 31; case 'C': return 36; case 'X': return 23; case 'D': return 19;
+    case 'U': return 35; case 'P': return 44; case 'Q': return 40; case 'B': return 19;
+    case 'I': return 50; case 'N': return 20;
+    default:  return 0;
+    }
+}
+static_assert(spec_len('R') == sizeof(StockDirectory) && spec_len('Q') == sizeof(CrossTrade));
 
 // Per-type expected wire length for every message type this build models.
 // 0 = not modeled (system/admin messages), which the callers skip by the
@@ -136,28 +208,35 @@ static_assert(expected_len('A') == 36 && expected_len('F') == 40 &&
               expected_len('E') == 31 && expected_len('C') == 36 &&
               expected_len('X') == 23 && expected_len('D') == 19 &&
               expected_len('U') == 35 && expected_len('S') == 0);
+static_assert(spec_len('A') == expected_len('A') && spec_len('F') == expected_len('F') &&
+              spec_len('E') == expected_len('E') && spec_len('C') == expected_len('C') &&
+              spec_len('X') == expected_len('X') && spec_len('D') == expected_len('D') &&
+              spec_len('U') == expected_len('U'));
 
 // Handle one message against a book. `p` points at the type byte. Returns
 // the message length consumed, 0 if the type is unknown (caller resyncs).
-// Free function so both the single-book FeedHandler and the sharded parallel
-// engine share one dispatch implementation.
+// Free function so the single-book FeedHandler, the sharded parallel engine
+// and the real-day replay share one dispatch implementation. `Units` picks
+// the price conversion (CentTicks by default, WireUnits for wire-unit books);
+// `Book` is a LimitOrderBook or an ExactOrderBook.
 //
 // UNCHECKED: trusts the type byte and reads sizeof(struct) bytes. Use only
 // when the caller has already validated the length (see dispatch_checked).
-LOB_FORCE_INLINE size_t dispatch(LimitOrderBook& book, const uint8_t* p) {
+template <typename Units = CentTicks, typename Book>
+LOB_FORCE_INLINE size_t dispatch(Book& book, const uint8_t* p) {
     switch (static_cast<char>(*p)) {
     case 'A': {
         auto* m = reinterpret_cast<const AddOrder*>(p);
         book.add(be64(m->order_ref),
                  m->side == 'B' ? Side::Bid : Side::Ask,
-                 price_to_ticks(m->price), be32(m->shares));
+                 Units::convert(m->price), be32(m->shares));
         return sizeof(AddOrder);
     }
     case 'F': {
         auto* m = reinterpret_cast<const AddOrderMPID*>(p);
         book.add(be64(m->base.order_ref),
                  m->base.side == 'B' ? Side::Bid : Side::Ask,
-                 price_to_ticks(m->base.price), be32(m->base.shares));
+                 Units::convert(m->base.price), be32(m->base.shares));
         return sizeof(AddOrderMPID);
     }
     case 'E': {
@@ -183,7 +262,7 @@ LOB_FORCE_INLINE size_t dispatch(LimitOrderBook& book, const uint8_t* p) {
     case 'U': {
         auto* m = reinterpret_cast<const OrderReplace*>(p);
         book.replace(be64(m->orig_ref), be64(m->new_ref),
-                     price_to_ticks(m->price), be32(m->shares));
+                     Units::convert(m->price), be32(m->shares));
         return sizeof(OrderReplace);
     }
     default:
@@ -197,13 +276,14 @@ LOB_FORCE_INLINE size_t dispatch(LimitOrderBook& book, const uint8_t* p) {
 // skips it by prefix. Unknown types return 0 without counting (they are
 // legal ITCH, just not modeled). Cost on the hot path: one table lookup and
 // one predictable compare.
-LOB_FORCE_INLINE size_t dispatch_checked(LimitOrderBook& book, const uint8_t* p,
+template <typename Units = CentTicks, typename Book>
+LOB_FORCE_INLINE size_t dispatch_checked(Book& book, const uint8_t* p,
                                          uint16_t msg_len, uint64_t& bad_length) {
     if (LOB_UNLIKELY(msg_len == 0)) { ++bad_length; return 0; }
     uint16_t want = expected_len(*p);
     if (want == 0) return 0;                       // not modeled: skip
     if (LOB_UNLIKELY(msg_len != want)) { ++bad_length; return 0; }
-    return dispatch(book, p);
+    return dispatch<Units>(book, p);
 }
 
 // --------------------------------------------------------------------------
