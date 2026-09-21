@@ -1,11 +1,11 @@
 === lob_replay: NASDAQ TotalView-ITCH 5.0 day replay ===
-run: 2026-09-21 03:22:53 local | cpu: Intel(R) Core(TM) Ultra 7 265H | compiler: g++ 16.1.0
+run: 2026-09-21 04:29:10 local | cpu: Intel(R) Core(TM) Ultra 7 265H | compiler: g++ 16.1.0
 command: lob_replay 01302019.NASDAQ_ITCH50 --symbols AAPL,MSFT,AMZN,GOOGL,FB,INTC,CSCO,NVDA,TSLA,NFLX --at 12:00:00,16:00:00 --cpu 0
-source: git commit eaeb960f0c547dff9548ccea4e147455f7abe9e5
+source: git commit 5b78e5a29b4570d531f61e207b75775cc5ee948d
 file: 01302019.NASDAQ_ITCH50
 chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,024 MB
 
-[1] pre-scan (untimed, 120.5 s)
+[1] pre-scan (untimed, 121.0 s)
   bytes 11,245,883,092 | messages 368,366,634 | trailing bytes 0
   message counts by type:
      A   162,970,455    B           116    C       158,886    D   158,273,361
@@ -18,7 +18,7 @@ chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,
   stock directory: 8,714 'R' messages for 8,713 stock_locates (1 repeated, 0 renamed) | locates with order messages: 8,695
   adds (A, F and the add half of U): 191,919,099 | peak resting orders, whole market: 1,742,866
   add prices that are not whole cents: 718,627 | outside $0.01..$1310.72: 587,096
-  sizing (14.0 s): 8,695 books | grid $0.01: 8,323, grid $0.0001: 372 | ladder 1024 MB | band ticks min 64 median 2,048 max 131,072
+  sizing (13.4 s): 8,695 books | grid $0.01: 8,323, grid $0.0001: 372 | ladder 1024 MB | band ticks min 64 median 2,048 max 131,072
   adds the chosen ladders cover: 191,722,488 of 191,919,099 (99.898%); the other 196,611 rest in the overflow
   pools 2,276,721 order slots (73 MB) | id maps 6,642,368 slots (106 MB)
 
@@ -303,7 +303,7 @@ chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,
   bad_length: pre-scan 0, dispatch 0 | dropped_out_of_band 0 | unknown order id 0
   adds on the ladder 191,722,488 | in the overflow 196,611 (0.102% of 191,919,099; sizing predicted 196,611)
   checkpoints 76 (no differential)
-  dispatch time 44.197 s for 368,366,634 messages (120.0 ns/msg)
+  dispatch time 40.564 s for 368,366,634 messages (110.1 ns/msg)
   final books (end of file):
   AAPL   locate 14    resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
   MSFT   locate 5217  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
@@ -316,7 +316,7 @@ chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,
   TSLA   locate 7804  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
   NFLX   locate 5430  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
   book digest chain over 42 chunk boundaries: 17b49d11d49913b3
-  wall time 189 s
+  wall time 185 s
 
 RESULT: PASS
 exit 0

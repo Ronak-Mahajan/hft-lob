@@ -1,0 +1,77 @@
+Environment for perf_20190130_repro_latency.log and perf_20190130_repro_throughput.log (the perf_latency and
+perf_throughput runs below). The same batch also ran lob_replay --differential (first) and itch_count (last); those
+two logs are not in results/. The binaries were built into a scratch directory, shown below as bin/; the runs used the
+directory holding 01302019.NASDAQ_ITCH50 as their working directory.
+--- build (source: git archive of commit 18d608202e1617c9e44d368cc1d0272a92d327de into a clean directory)
++ g++ --version
++ head -1
+g++.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r4) 16.1.0
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="18d608202e1617c9e44d368cc1d0272a92d327de"' src/replay_main.cpp -o bin/lob_replay.exe
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="18d608202e1617c9e44d368cc1d0272a92d327de"' '-DLOB_BUILD_FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include"' src/perf_main.cpp -o bin/lob_perf.exe
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY '-DLOB_GIT_COMMIT="18d608202e1617c9e44d368cc1d0272a92d327de"' '-DLOB_BUILD_FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY"' src/perf_main.cpp -o bin/lob_perf_latency.exe
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static tools/itch_count.cpp -o bin/itch_count.exe
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include src/main.cpp -o bin/lob_bench.exe
++ set +x
+--- run order (local time)
+Mon Sep 21 03:53:13 CDT 2026 start replay_differential: bin/lob_replay.exe 01302019.NASDAQ_ITCH50 --differential
+Mon Sep 21 04:03:03 CDT 2026 end replay_differential
+Mon Sep 21 04:03:10 CDT 2026 start perf_latency: bin/lob_perf_latency.exe 01302019.NASDAQ_ITCH50
+Mon Sep 21 04:06:43 CDT 2026 end perf_latency
+Mon Sep 21 04:06:50 CDT 2026 start perf_throughput: bin/lob_perf.exe 01302019.NASDAQ_ITCH50
+Mon Sep 21 04:09:25 CDT 2026 end perf_throughput
+Mon Sep 21 04:09:32 CDT 2026 start itch_count: bin/itch_count.exe 01302019.NASDAQ_ITCH50
+Mon Sep 21 04:09:48 CDT 2026 end itch_count
+--- before each run: power line status, power plan, and the processes that used the most CPU in the 5 s before it
+=== replay_differential 2026-09-21 03:53:06
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome          0.8
+kass           0.41
+claude         0.12
+nvsphelper64   0.08
+powershell     0.06
+Spotify        0.06
+
+
+
+=== perf_latency 2026-09-21 04:03:04
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+claude       0.41
+chrome       0.23
+kass         0.14
+powershell   0.09
+claude       0.05
+claude       0.05
+
+
+
+=== perf_throughput 2026-09-21 04:06:43
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome               1.45
+kass                 0.66
+claude               0.33
+CrossDeviceService   0.09
+powershell           0.08
+explorer             0.08
+
+
+
+=== itch_count 2026-09-21 04:09:25
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome       0.95
+kass         0.53
+claude        0.2
+powershell   0.08
+bash         0.06
+bash         0.06
+
+
+
+ALL DONE

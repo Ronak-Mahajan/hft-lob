@@ -90,15 +90,21 @@ Which commit each committed log was built from:
 
 | Logs | Built from |
 |---|---|
-| `replay_20190130_differential.log`, `closing_cross_replay_20190130.log`, `replay_fixture.log`, `replay_selftest.log`, `synthetic_*.log` | `eaeb960` (printed in the lob_replay logs; build lines in `replay_synthetic_run_env.log`) |
+| `replay_20190130_differential.log`, `closing_cross_replay_20190130.log`, `replay_fixture.log`, `replay_selftest.log` | `5b78e5a` (printed in each log; build lines in `replay_run_env.log`) |
+| `synthetic_*.log` | `eaeb960` (build lines in `replay_synthetic_run_env.log`) |
 | `perf_20190130_run_*.log` | `d17968a` (printed in every log; build lines in `perf_20190130_run_env.log`) |
+| `perf_20190130_repro_*.log` | `18d6082` (printed in each log; build lines in `perf_20190130_repro_env.log`) |
 | `itch_count_20190130.log` | `caa468f` (build line at the top of the log) |
 
-At the commit that adds this manifest, `lob_replay`, `lob_bench` and
-`lob_parallel` compile exactly the sources of `eaeb960`; `lob_perf` differs
-from `d17968a` only in `clock_of()` in `src/replay_day.hpp`, which formats
-timestamps in log lines; `tools/itch_count.cpp` is unchanged since `caa468f`.
-To build exactly the source a log names, `git checkout` that commit first.
+At the commit that last updated this manifest: `lob_replay` compiles exactly
+the sources of `5b78e5a`. `lob_bench` differs from `eaeb960` only in the
+reference comparison code of its checks 6 and 7 (`src/book_diff.hpp`,
+`src/replay_run.hpp`), not in the code its benchmarks time. `lob_parallel`
+compiles exactly the sources of `eaeb960`. `lob_perf` differs from `d17968a`
+only in `clock_of()` in `src/replay_day.hpp`, which formats timestamps in log
+lines, and compiles exactly the sources of `18d6082`. `tools/itch_count.cpp`
+is unchanged since `caa468f`. To build exactly the source a log names,
+`git checkout` that commit first.
 
 ## Reproducing every file in `results/`
 
@@ -123,6 +129,8 @@ Run from `data/`, with the decompressed file there:
 | `perf_20190130_run_latency_1.log` .. `_3.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, three times |
 | `perf_20190130_run_multicore_demux.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50 --mode demux --workers 1,2,3,4,5,8,13` |
 | `perf_20190130_run_multicore_presplit.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50 --mode presplit --workers 1,2,3,4,5,8,13` |
+| `perf_20190130_repro_latency.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, built from `18d6082` |
+| `perf_20190130_repro_throughput.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50`, built from `18d6082` |
 
 No market data needed, from any directory:
 
@@ -133,20 +141,23 @@ No market data needed, from any directory:
 | `replay_fixture.log` | `run replay_fixture.log ./lob_replay.exe --fixture` |
 | `replay_selftest.log` | `run replay_selftest.log ./lob_replay.exe --selftest` |
 | `official_close_yahoo_20190130.log` | `bash tools/official_close_yahoo.sh > results/official_close_yahoo_20190130.log` (network; rerun on 2026-09-21, its output differed from the committed log only in the fetch time on the first line) |
+| `official_close_nasdaq_20190130.log` | `bash tools/official_close_nasdaq.sh > results/official_close_nasdaq_20190130.log` (network) |
 | `perf_20190130.json` | `perl tools/perf_json.pl results > results/perf_20190130.json` (built from the committed logs; refuses if any run failed or printed a book digest different from the differential run's) |
 
 Recorded by the scripts that ran the batches:
 
-- `perf_20190130_run_env.log` and `replay_synthetic_run_env.log`: the build
-  lines, the run order, and before each run the power state, the power plan
-  and the processes that used the most CPU in the preceding 5 s. Each batch
-  ran back to back in the order recorded there.
+- `perf_20190130_run_env.log`, `perf_20190130_repro_env.log`,
+  `replay_run_env.log` and `replay_synthetic_run_env.log`: the build lines,
+  the run order, and before each run the power state, the power plan and the
+  processes that used the most CPU in the preceding 5 s. Each batch ran back
+  to back in the order recorded there.
 
 Written by hand, from the logs it cites:
 
 - `closing_cross_20190130.md`: the closing cross prices in the file against
   the official closes, from `itch_count_20190130.log`,
-  `closing_cross_replay_20190130.log` and `official_close_yahoo_20190130.log`.
+  `closing_cross_replay_20190130.log`, `official_close_nasdaq_20190130.log`
+  and `official_close_yahoo_20190130.log`.
 
 The run order matters for the performance logs only in that they share a
 machine: timings vary with the host, its power plan and whatever else is

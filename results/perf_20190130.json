@@ -106,7 +106,7 @@
   "correctness": {
     "note": "every run below printed a digest of every book's full state (levels and queue order) after each of the 42 chunks; all of them equal the digests of the differential run, which compared every book against the reference model",
     "differential_log": "results/replay_20190130_differential.log",
-    "differential_commit": "eaeb960f0c547dff9548ccea4e147455f7abe9e5",
+    "differential_commit": "5b78e5a29b4570d531f61e207b75775cc5ee948d",
     "differential_checkpoints": 76,
     "differential_mismatches": 0,
     "digest_chain": "17b49d11d49913b3",
