@@ -1,7 +1,7 @@
 # Build script: finds g++ (PATH first, then the WinGet WinLibs install) and
 # compiles all six binaries. Usage:  .\build.ps1 [-Run] [-Quick]
-#   -Run    run lob_bench.exe, lob_parallel.exe, spsc_stress.exe and
-#           lob_replay.exe --selftest after building
+#   -Run    run lob_bench.exe, lob_parallel.exe, spsc_stress.exe,
+#           lob_replay.exe --fixture and lob_replay.exe --selftest after building
 #   -Quick  pass --quick to the benchmarks (CI sizes; not a measurement)
 param([switch]$Run, [switch]$Quick)
 
@@ -52,6 +52,8 @@ if ($Run) {
     & "$root\lob_parallel.exe" @arg
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & "$root\spsc_stress.exe"
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & "$root\lob_replay.exe" --fixture
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & "$root\lob_replay.exe" --selftest
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
