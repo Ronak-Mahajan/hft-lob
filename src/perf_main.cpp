@@ -25,8 +25,9 @@
 //                    with rdtsc_begin()/rdtsc_end() (lfence; rdtsc ... rdtscp;
 //                    lfence), the raw cycles go into an exact histogram per
 //                    message type, and the minimum cost of an empty timer
-//                    pair (the smaller of two calibrations, before and after
-//                    the pass) is subtracted when the percentiles are read.
+//                    pair (the smallest of the calibrations taken before
+//                    the pass, after every chunk and after the pass) is
+//                    subtracted when the percentiles are read.
 //
 // After every chunk (untimed) the tool prints books_digest(), a digest of the
 // full state of every book; lob_replay --differential prints the same
@@ -699,9 +700,9 @@ struct Hist {
     }
 };
 
-uint64_t timer_overhead(std::vector<uint64_t>& samples) {
+uint64_t timer_overhead(std::vector<uint64_t>& samples, int pairs = 100'000) {
     uint64_t best = ~0ull;
-    for (int i = 0; i < 100'000; ++i) {
+    for (int i = 0; i < pairs; ++i) {
         uint64_t t0 = rdtsc_begin();
         uint64_t t1 = rdtsc_end();
         samples.push_back(t1 - t0);
@@ -712,12 +713,14 @@ uint64_t timer_overhead(std::vector<uint64_t>& samples) {
 }
 
 // The TSC ticks at a fixed rate while the core's clock follows the power
-// plan, so an empty timer pair costs about twice as many TSC cycles on a core
-// running at half its clock. A calibration taken just after the pre-scan's
-// file reads can catch the core before it has clocked up. So the pinned core
-// first spins for 0.5 s, the pair is measured then and again after the pass,
-// and the smaller of the two minimums is subtracted from every sample: it can
-// under-subtract relative to the fastest state seen, never over-subtract.
+// plan, so an empty timer pair costs about twice as many TSC cycles while the
+// core runs at half its clock, and on this laptop that state comes and goes
+// during a pass. So the pair is measured before the pass (after 0.5 s of
+// busy spinning on the pinned core), after every chunk (10,000 pairs,
+// outside the timed region) and after the pass, the histograms hold raw
+// cycles, and the smallest minimum seen is subtracted from every sample: that
+// can leave part of the overhead in a sample taken while the core was slow,
+// never subtract more than the fastest state's overhead.
 void busy_spin(double seconds) {
     const auto t0 = clk::now();
     while (std::chrono::duration<double>(clk::now() - t0).count() < seconds) { /* spin */ }
@@ -745,13 +748,17 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
                 "itch::dispatch_checked<WireUnits>(), between rdtsc_begin() (lfence; rdtsc) and "
                 "rdtsc_end() (rdtscp; lfence)\n");
     std::printf("  empty timer pair, 100,000 samples: min %" PRIu64 " | p50 %" PRIu64 " | p99 %" PRIu64
-                " cycles (before the pass, after 0.5 s of busy spinning; measured again after the pass)\n",
+                " cycles (before the pass, after 0.5 s of busy spinning; measured again after every "
+                "chunk and after the pass)\n",
                 pre, pre_samples[pre_samples.size() / 2], pre_samples[pre_samples.size() * 99 / 100]);
     std::fflush(stdout);
 
     std::vector<Hist> hist(kSlots);
     ChunkReader rd(o.path.c_str(), o.chunk);
     EndState e;
+    std::vector<uint64_t> chunk_min;                       // empty-pair minimum after each chunk
+    std::vector<uint64_t> cal;
+    cal.reserve(10'000);
     const uint8_t* consumed = nullptr;
     const Stamp s0 = stamp();
     while (rd.next(consumed)) {
@@ -780,6 +787,8 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
         e.chain.add(dg);
         chunk_line(++e.chunks, e.messages - n0, e.messages,
                    std::chrono::duration<double>(t1 - t0).count(), dg);
+        cal.clear();
+        chunk_min.push_back(timer_overhead(cal, 10'000));
         consumed = p;
     }
     const Stamp s1 = stamp();
@@ -788,7 +797,10 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
     const double ghz = ghz_between(s0, s1);
     std::vector<uint64_t> post_samples;
     const uint64_t post = timer_overhead(post_samples);
-    const uint64_t ovh = std::min(pre, post);
+    uint64_t ovh = std::min(pre, post);
+    for (uint64_t c : chunk_min) ovh = std::min(ovh, c);
+    std::vector<uint64_t> cm_sorted = chunk_min;
+    std::sort(cm_sorted.begin(), cm_sorted.end());
 
     Hist order, all;
     for (int s = 0; s < 7; ++s) order.merge(hist[s]);
@@ -801,11 +813,17 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
                 "not throughput)\n", cpu);
     std::printf("  TSC over the whole pass (%.1f s): %.6f GHz; ns = cycles / %.6f\n",
                 std::chrono::duration<double>(s1.t - s0.t).count(), ghz, ghz);
-    std::printf("  empty timer pair after the pass, 100,000 samples: min %" PRIu64 " | p50 %" PRIu64
-                " | p99 %" PRIu64 " cycles; the smaller min (%" PRIu64 ", of %" PRIu64 " before and %" PRIu64
-                " after) is subtracted from every sample, clamped at 0\n",
-                post, post_samples[post_samples.size() / 2], post_samples[post_samples.size() * 99 / 100],
-                ovh, pre, post);
+    std::printf("  empty timer pair after each chunk, 10,000 samples each, min cycles:");
+    for (size_t i = 0; i < chunk_min.size(); ++i)
+        std::printf("%s %" PRIu64, i % 21 == 0 ? "\n   " : "", chunk_min[i]);
+    std::printf("\n  empty timer pair after the pass, 100,000 samples: min %" PRIu64 " | p50 %" PRIu64
+                " | p99 %" PRIu64 " cycles\n",
+                post, post_samples[post_samples.size() / 2], post_samples[post_samples.size() * 99 / 100]);
+    std::printf("  subtracted from every sample, clamped at 0: %" PRIu64 " cycles, the smallest minimum seen "
+                "(before the pass %" PRIu64 ", after the chunks %" PRIu64 " to %" PRIu64 ", after the pass %" PRIu64
+                ")\n",
+                ovh, pre, cm_sorted.empty() ? 0 : cm_sorted.front(), cm_sorted.empty() ? 0 : cm_sorted.back(),
+                post);
     std::printf("  samples clamped to 0 after overhead subtraction: %s\n", num(all.at_most(ovh)).c_str());
     std::printf("  percentiles are nearest-rank over every sample\n");
     auto row = [&](const char* name, const Hist& h, bool ns) {
