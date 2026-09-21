@@ -1,0 +1,278 @@
+$ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include src/replay_main.cpp -o lob_replay   (src/ and include/ as committed at 10e89c7)
+$ ./lob_replay 01302019.NASDAQ_ITCH50 --symbols AAPL,MSFT,AMZN,GOOGL,FB,INTC,CSCO,NVDA,TSLA,NFLX --at 12:00:00,16:00:00 --cpu 0
+=== lob_replay: NASDAQ TotalView-ITCH 5.0 day replay ===
+run: 2026-09-21 01:40:49 local | cpu: Intel(R) Core(TM) Ultra 7 265H | compiler: g++ 16.1.0
+file: 01302019.NASDAQ_ITCH50
+chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,024 MB
+
+[1] pre-scan (untimed, 119.1 s)
+  bytes 11,245,883,092 | messages 368,366,634 | trailing bytes 0
+  message counts by type:
+     A   162,970,455    B           116    C       158,886    D   158,273,361
+     E     8,096,995    F     1,725,898    H         8,805    I     3,684,511
+     J            62    L       193,769    P     1,326,184    Q        17,430
+     R         8,714    S             6    U    27,222,746    V             1
+     X     4,669,874    Y         8,821
+  bad_length 0 | unknown type 0
+  first message 03:03:59.687 | last message 20:05:00.000 (ET, from message timestamps) | timestamps out of order 0
+  stock directory: 8,714 'R' messages for 8,713 stock_locates (1 repeated, 0 renamed) | locates with order messages: 8,695
+  adds (A, F and the add half of U): 191,919,099 | peak resting orders, whole market: 1,742,866
+  add prices that are not whole cents: 718,627 | outside $0.01..$1310.72: 587,096
+  sizing (9.4 s): 8,695 books | grid $0.01: 8,323, grid $0.0001: 372 | ladder 1024 MB | band ticks min 64 median 2,048 max 131,072
+  adds the chosen ladders cover: 191,722,488 of 191,919,099 (99.898%); the other 196,611 rest in the overflow
+  pools 2,276,721 order slots (73 MB) | id maps 6,642,368 slots (106 MB)
+
+  named symbols (Stock Directory, and the 'Q' crosses NASDAQ ran):
+  AAPL   locate 14    adds 875,938 | peak resting 42,774 | grid $0.01 | ladder 32,768 ticks from $0.0100
+         opening cross 163.2200 x 770,817 shares at 09:30:00.300
+         closing cross 165.2500 x 2,340,937 shares at 16:00:00.563
+  MSFT   locate 5217  adds 867,658 | peak resting 22,116 | grid $0.01 | ladder 16,384 ticks from $0.0100
+         opening cross 104.6200 x 500,581 shares at 09:30:00.148
+         closing cross 106.3800 x 2,606,642 shares at 16:00:00.531
+  AMZN   locate 381   adds 511,215 | peak resting 39,028 | grid $0.01 | ladder 131,072 ticks from $899.0000
+         opening cross 1623.0000 x 42,456 shares at 09:30:00.752
+         closing cross 1670.4300 x 183,741 shares at 16:00:00.764
+  GOOGL  locate 3420  adds 882,948 | peak resting 8,769 | grid $0.01 | ladder 65,536 ticks from $745.1300
+         opening cross 1077.3600 x 14,811 shares at 09:30:00.924
+         closing cross 1097.9900 x 116,867 shares at 16:00:00.273
+  FB     locate 2728  adds 679,229 | peak resting 20,986 | grid $0.01 | ladder 32,768 ticks from $0.0100
+         opening cross 146.2200 x 192,425 shares at 09:30:00.872
+         closing cross 150.4200 x 1,017,765 shares at 16:00:00.357
+  INTC   locate 4118  adds 609,179 | peak resting 11,853 | grid $0.01 | ladder 8,192 ticks from $0.0100
+         opening cross 46.6900 x 353,481 shares at 09:30:00.568
+         closing cross 47.5400 x 2,204,287 shares at 16:00:00.003
+  CSCO   locate 1718  adds 423,946 | peak resting 7,860 | grid $0.01 | ladder 8,192 ticks from $0.0100
+         opening cross 45.9400 x 348,306 shares at 09:30:00.850
+         closing cross 46.7100 x 1,937,262 shares at 16:00:00.414
+  NVDA   locate 5628  adds 701,052 | peak resting 18,558 | grid $0.01 | ladder 32,768 ticks from $0.0100
+         opening cross 134.8000 x 258,932 shares at 09:30:00.880
+         closing cross 137.3900 x 335,421 shares at 16:00:00.591
+  TSLA   locate 7804  adds 476,612 | peak resting 18,306 | grid $0.01 | ladder 32,768 ticks from $173.5000
+         opening cross 300.4500 x 40,304 shares at 09:30:00.619
+         closing cross 308.7700 x 74,672 shares at 16:00:00.366
+  NFLX   locate 5430  adds 378,077 | peak resting 14,071 | grid $0.01 | ladder 32,768 ticks from $148.0000
+         opening cross 332.5000 x 50,682 shares at 09:30:00.866
+         closing cross 340.6600 x 298,927 shares at 16:00:00.617
+
+[2] replay | thread pinned to cpu 0
+  checkpoint   1 | message     5,000,000 | 07:50:47.762 | resting orders 21,239
+  checkpoint   2 | message    10,000,000 | 09:29:25.142 | resting orders 340,926
+  checkpoint   3 | message    15,000,000 | 09:32:23.480 | resting orders 1,481,028
+  checkpoint   4 | message    20,000,000 | 09:36:09.034 | resting orders 1,533,131
+  checkpoint   5 | message    25,000,000 | 09:39:49.689 | resting orders 1,556,851
+  checkpoint   6 | message    30,000,000 | 09:43:45.424 | resting orders 1,548,122
+  checkpoint   7 | message    35,000,000 | 09:47:51.598 | resting orders 1,570,457
+  checkpoint   8 | message    40,000,000 | 09:52:10.696 | resting orders 1,585,524
+  checkpoint   9 | message    45,000,000 | 09:56:54.377 | resting orders 1,589,701
+  checkpoint  10 | message    50,000,000 | 10:01:44.569 | resting orders 1,593,422
+  checkpoint  11 | message    55,000,000 | 10:06:04.473 | resting orders 1,600,015
+  checkpoint  12 | message    60,000,000 | 10:11:06.173 | resting orders 1,605,440
+  checkpoint  13 | message    65,000,000 | 10:15:56.915 | resting orders 1,612,661
+  checkpoint  14 | message    70,000,000 | 10:21:06.736 | resting orders 1,614,490
+  checkpoint  15 | message    75,000,000 | 10:26:57.655 | resting orders 1,615,303
+  checkpoint  16 | message    80,000,000 | 10:32:45.713 | resting orders 1,613,450
+  checkpoint  17 | message    85,000,000 | 10:37:51.130 | resting orders 1,620,864
+  checkpoint  18 | message    90,000,000 | 10:43:20.184 | resting orders 1,626,686
+  checkpoint  19 | message    95,000,000 | 10:49:09.141 | resting orders 1,629,107
+  checkpoint  20 | message   100,000,000 | 10:55:11.316 | resting orders 1,629,079
+  checkpoint  21 | message   105,000,000 | 11:00:35.156 | resting orders 1,630,196
+  checkpoint  22 | message   110,000,000 | 11:04:57.847 | resting orders 1,627,768
+  checkpoint  23 | message   115,000,000 | 11:10:55.101 | resting orders 1,632,730
+  checkpoint  24 | message   120,000,000 | 11:16:53.860 | resting orders 1,637,947
+  checkpoint  25 | message   125,000,000 | 11:23:10.732 | resting orders 1,639,045
+  checkpoint  26 | message   130,000,000 | 11:29:44.876 | resting orders 1,639,491
+  checkpoint  27 | message   135,000,000 | 11:36:21.981 | resting orders 1,639,796
+  checkpoint  28 | message   140,000,000 | 11:43:12.138 | resting orders 1,640,117
+  checkpoint  29 | message   145,000,000 | 11:50:10.259 | resting orders 1,641,331
+  checkpoint  30 | message   150,000,000 | 11:57:40.768 | resting orders 1,642,646
+  checkpoint  31 | message   151,453,346 | 11:59:59.998 | resting orders 1,642,242
+  books at 12:00:00.000 ET (state after message 151,453,346):
+  AAPL   locate 14    resting 39,587 | levels bid 2711 ask 2624 | overflow levels 54 | BBO 162.3000 x 101 / 162.3100 x 400
+         bid     162.3000        101 (   2)   | ask     162.3100        400 (   3)
+         bid     162.2900        174 (   2)   | ask     162.3200        705 (   5)
+         bid     162.2800        900 (   5)   | ask     162.3300        500 (   1)
+         bid     162.2700        912 (   6)   | ask     162.3400      1,200 (   2)
+         bid     162.2600        704 (   5)   | ask     162.3500      1,420 (   4)
+  MSFT   locate 5217  resting 19,134 | levels bid 1581 ask 1135 | overflow levels 37 | BBO 105.4700 x 700 / 105.4800 x 400
+         bid     105.4700        700 (   7)   | ask     105.4800        400 (   4)
+         bid     105.4600        993 (   7)   | ask     105.4900      1,212 (  10)
+         bid     105.4500        754 (   6)   | ask     105.5000      9,544 (  49)
+         bid     105.4400        919 (  10)   | ask     105.5100        300 (   3)
+         bid     105.4300      1,319 (  10)   | ask     105.5200        739 (   8)
+  AMZN   locate 381   resting 34,678 | levels bid 2795 ask 2589 | overflow levels 509 | BBO 1647.0600 x 3 / 1647.4500 x 10
+         bid    1647.0600          3 (   1)   | ask    1647.4500         10 (   1)
+         bid    1647.0200        115 (   2)   | ask    1647.4600         11 (   2)
+         bid    1647.0000         72 (   3)   | ask    1647.6000        121 (   2)
+         bid    1646.9100          3 (   1)   | ask    1647.6400        100 (   1)
+         bid    1646.9000          1 (   1)   | ask    1647.6800          1 (   1)
+  GOOGL  locate 3420  resting 7,783 | levels bid 1143 ask 887 | overflow levels 196 | BBO 1080.9300 x 100 / 1081.5600 x 1
+         bid    1080.9300        100 (   1)   | ask    1081.5600          1 (   1)
+         bid    1080.8100         20 (   1)   | ask    1081.5900        150 (   1)
+         bid    1080.7800        100 (   1)   | ask    1081.6700          2 (   1)
+         bid    1080.6900         44 (   1)   | ask    1081.6800          1 (   1)
+         bid    1080.6600          1 (   1)   | ask    1081.7300        100 (   1)
+  FB     locate 2728  resting 19,073 | levels bid 1409 ask 2040 | overflow levels 18 | BBO 147.1500 x 100 / 147.1800 x 100
+         bid     147.1500        100 (   1)   | ask     147.1800        100 (   1)
+         bid     147.1400        905 (   2)   | ask     147.1900        500 (   1)
+         bid     147.1300        710 (   4)   | ask     147.2000        635 (   4)
+         bid     147.1200      1,360 (   8)   | ask     147.2100        200 (   2)
+         bid     147.1100      1,042 (  10)   | ask     147.2200        624 (   5)
+  INTC   locate 4118  resting 10,616 | levels bid 827 ask 865 | overflow levels 22 | BBO 46.7700 x 1,335 / 46.7800 x 2,001
+         bid      46.7700      1,335 (   8)   | ask      46.7800      2,001 (  13)
+         bid      46.7600      4,129 (  21)   | ask      46.7900      3,425 (  12)
+         bid      46.7500      3,900 (  17)   | ask      46.8000    147,603 (  38)
+         bid      46.7400      3,145 (  18)   | ask      46.8100      3,850 (  13)
+         bid      46.7300      4,579 (  17)   | ask      46.8200      4,269 (  15)
+  CSCO   locate 1718  resting 6,883 | levels bid 799 ask 537 | overflow levels 15 | BBO 46.3200 x 5,468 / 46.3300 x 1,200
+         bid      46.3200      5,468 (  14)   | ask      46.3300      1,200 (   7)
+         bid      46.3100      3,939 (  15)   | ask      46.3400      5,549 (  23)
+         bid      46.3000      3,239 (  10)   | ask      46.3500      4,863 (  13)
+         bid      46.2900      6,531 (  18)   | ask      46.3600      7,339 (  10)
+         bid      46.2800      5,082 (  18)   | ask      46.3700      4,421 (  10)
+  NVDA   locate 5628  resting 16,453 | levels bid 1361 ask 1890 | overflow levels 64 | BBO 134.0100 x 7 / 134.0500 x 100
+         bid     134.0100          7 (   3)   | ask     134.0500        100 (   1)
+         bid     134.0000        543 (   5)   | ask     134.0600        100 (   1)
+         bid     133.9900        200 (   2)   | ask     134.0700        200 (   2)
+         bid     133.9800        200 (   2)   | ask     134.0800        100 (   1)
+         bid     133.9700        200 (   2)   | ask     134.0900        100 (   1)
+  TSLA   locate 7804  resting 16,601 | levels bid 1364 ask 1646 | overflow levels 214 | BBO 300.1400 x 106 / 300.2800 x 48
+         bid     300.1400        106 (   2)   | ask     300.2800         48 (   1)
+         bid     300.1300        100 (   1)   | ask     300.3000        251 (   2)
+         bid     300.1200        115 (   3)   | ask     300.3500        100 (   1)
+         bid     300.1100        200 (   2)   | ask     300.3700        100 (   1)
+         bid     300.1000        100 (   1)   | ask     300.3800        100 (   1)
+  NFLX   locate 5430  resting 13,106 | levels bid 1264 ask 1431 | overflow levels 183 | BBO 331.7100 x 100 / 331.9000 x 100
+         bid     331.7100        100 (   1)   | ask     331.9000        100 (   1)
+         bid     331.7000      1,000 (   1)   | ask     331.9500        100 (   1)
+         bid     331.6700         61 (   1)   | ask     331.9600        100 (   1)
+         bid     331.6100        100 (   1)   | ask     331.9700        100 (   1)
+         bid     331.6000        100 (   1)   | ask     331.9900        400 (   1)
+  checkpoint  32 | message   155,000,000 | 12:04:44.443 | resting orders 1,663,862
+  checkpoint  33 | message   160,000,000 | 12:13:19.242 | resting orders 1,663,838
+  checkpoint  34 | message   165,000,000 | 12:20:56.121 | resting orders 1,664,508
+  checkpoint  35 | message   170,000,000 | 12:28:22.005 | resting orders 1,663,930
+  checkpoint  36 | message   175,000,000 | 12:36:14.416 | resting orders 1,667,042
+  checkpoint  37 | message   180,000,000 | 12:44:33.153 | resting orders 1,667,028
+  checkpoint  38 | message   185,000,000 | 12:53:56.954 | resting orders 1,667,645
+  checkpoint  39 | message   190,000,000 | 13:03:06.835 | resting orders 1,669,914
+  checkpoint  40 | message   195,000,000 | 13:13:08.026 | resting orders 1,667,684
+  checkpoint  41 | message   200,000,000 | 13:22:12.680 | resting orders 1,666,522
+  checkpoint  42 | message   205,000,000 | 13:31:18.158 | resting orders 1,666,892
+  checkpoint  43 | message   210,000,000 | 13:41:12.582 | resting orders 1,668,905
+  checkpoint  44 | message   215,000,000 | 13:49:24.619 | resting orders 1,665,938
+  checkpoint  45 | message   220,000,000 | 13:57:14.970 | resting orders 1,619,078
+  checkpoint  46 | message   225,000,000 | 14:00:58.959 | resting orders 1,514,682
+  checkpoint  47 | message   230,000,000 | 14:04:16.323 | resting orders 1,535,694
+  checkpoint  48 | message   235,000,000 | 14:09:04.598 | resting orders 1,554,756
+  checkpoint  49 | message   240,000,000 | 14:12:57.983 | resting orders 1,591,813
+  checkpoint  50 | message   245,000,000 | 14:16:25.645 | resting orders 1,599,746
+  checkpoint  51 | message   250,000,000 | 14:20:21.253 | resting orders 1,605,834
+  checkpoint  52 | message   255,000,000 | 14:24:02.475 | resting orders 1,607,224
+  checkpoint  53 | message   260,000,000 | 14:29:06.459 | resting orders 1,613,392
+  checkpoint  54 | message   265,000,000 | 14:33:54.618 | resting orders 1,616,123
+  checkpoint  55 | message   270,000,000 | 14:37:48.550 | resting orders 1,628,083
+  checkpoint  56 | message   275,000,000 | 14:42:13.639 | resting orders 1,635,601
+  checkpoint  57 | message   280,000,000 | 14:46:45.939 | resting orders 1,631,174
+  checkpoint  58 | message   285,000,000 | 14:51:32.930 | resting orders 1,634,601
+  checkpoint  59 | message   290,000,000 | 14:55:31.132 | resting orders 1,632,003
+  checkpoint  60 | message   295,000,000 | 15:00:19.751 | resting orders 1,632,368
+  checkpoint  61 | message   300,000,000 | 15:05:20.251 | resting orders 1,638,630
+  checkpoint  62 | message   305,000,000 | 15:10:18.857 | resting orders 1,644,625
+  checkpoint  63 | message   310,000,000 | 15:14:57.463 | resting orders 1,644,408
+  checkpoint  64 | message   315,000,000 | 15:20:04.828 | resting orders 1,652,030
+  checkpoint  65 | message   320,000,000 | 15:25:00.896 | resting orders 1,675,129
+  checkpoint  66 | message   325,000,000 | 15:30:15.801 | resting orders 1,661,594
+  checkpoint  67 | message   330,000,000 | 15:34:48.321 | resting orders 1,669,956
+  checkpoint  68 | message   335,000,000 | 15:39:33.866 | resting orders 1,673,901
+  checkpoint  69 | message   340,000,000 | 15:44:03.671 | resting orders 1,674,326
+  checkpoint  70 | message   345,000,000 | 15:48:35.879 | resting orders 1,699,541
+  checkpoint  71 | message   350,000,000 | 15:53:07.026 | resting orders 1,710,901
+  checkpoint  72 | message   355,000,000 | 15:55:52.286 | resting orders 1,725,998
+  checkpoint  73 | message   360,000,000 | 15:58:16.012 | resting orders 1,693,786
+  checkpoint  74 | message   365,000,000 | 15:59:57.847 | resting orders 1,634,641
+  checkpoint  75 | message   365,323,584 | 15:59:59.999 | resting orders 1,579,011
+  books at 16:00:00.000 ET (state after message 365,323,584):
+  AAPL   locate 14    resting 42,767 | levels bid 3053 ask 2602 | overflow levels 54 | BBO 165.2400 x 1,800 / 165.2700 x 217
+         bid     165.2400      1,800 (   1)   | ask     165.2700        217 (   3)
+         bid     165.2100        200 (   2)   | ask     165.2800      3,853 (   6)
+         bid     165.2000      1,900 (   2)   | ask     165.2900        100 (   1)
+         bid     165.1900      8,200 (   5)   | ask     165.3000        100 (   1)
+         bid     165.1800        190 (   2)   | ask     165.3100        103 (   2)
+  MSFT   locate 5217  resting 22,071 | levels bid 1726 ask 1190 | overflow levels 39 | BBO 106.3000 x 7,640 / 106.3800 x 4,444
+         bid     106.3000      7,640 (   5)   | ask     106.3800      4,444 (   3)
+         bid     106.2800      8,177 (   3)   | ask     106.3900     13,572 (   6)
+         bid     106.2700      3,650 (   2)   | ask     106.4000     10,928 (  19)
+         bid     106.2600      7,658 (   2)   | ask     106.4100      3,400 (   1)
+         bid     106.2500      6,130 (   5)   | ask     106.4200        844 (   4)
+  AMZN   locate 381   resting 39,028 | levels bid 3143 ask 2756 | overflow levels 546 | BBO 1670.9900 x 291 / 1671.1000 x 149
+         bid    1670.9900        291 (   1)   | ask    1671.1000        149 (   1)
+         bid    1670.4300          5 (   1)   | ask    1671.1100         59 (   1)
+         bid    1670.4200        105 (   2)   | ask    1671.1400        100 (   1)
+         bid    1670.4100        300 (   3)   | ask    1671.2000         14 (   1)
+         bid    1670.4000        100 (   1)   | ask    1671.2300        300 (   2)
+  GOOGL  locate 3420  resting 8,760 | levels bid 1293 ask 951 | overflow levels 214 | BBO 1097.5900 x 160 / 1098.0000 x 782
+         bid    1097.5900        160 (   4)   | ask    1098.0000        782 (   3)
+         bid    1097.5300        200 (   1)   | ask    1098.0500        100 (   1)
+         bid    1097.5000        200 (   1)   | ask    1098.0800        305 (   1)
+         bid    1097.3900        100 (   1)   | ask    1098.1000        300 (   1)
+         bid    1097.3700        687 (   1)   | ask    1098.1100        700 (   1)
+  FB     locate 2728  resting 20,953 | levels bid 1593 ask 2090 | overflow levels 21 | BBO 150.3200 x 200 / 150.4200 x 6,018
+         bid     150.3200        200 (   1)   | ask     150.4200      6,018 (   4)
+         bid     150.3100        200 (   1)   | ask     150.4300        534 (   2)
+         bid     150.3000      8,238 (   8)   | ask     150.4400        142 (   2)
+         bid     150.2900      2,031 (   4)   | ask     150.4500      1,110 (   3)
+         bid     150.2800      5,718 (   6)   | ask     150.4600      8,830 (   3)
+  INTC   locate 4118  resting 11,703 | levels bid 923 ask 873 | overflow levels 23 | BBO 47.5300 x 880 / 47.5500 x 64,183
+         bid      47.5300        880 (   3)   | ask      47.5500     64,183 (  10)
+         bid      47.5200     26,161 (   7)   | ask      47.5600     36,988 (  16)
+         bid      47.5100     65,600 (  15)   | ask      47.5700     70,895 (  21)
+         bid      47.5000     26,400 (   5)   | ask      47.5800     32,800 (  11)
+         bid      47.4900     44,800 (  15)   | ask      47.5900     25,659 (   9)
+  CSCO   locate 1718  resting 7,750 | levels bid 851 ask 558 | overflow levels 16 | BBO 46.7000 x 10,700 / 46.7100 x 400
+         bid      46.7000     10,700 (   6)   | ask      46.7100        400 (   2)
+         bid      46.6900     39,548 (  10)   | ask      46.7200     49,819 (  17)
+         bid      46.6800     58,795 (  12)   | ask      46.7300     88,687 (  17)
+         bid      46.6700     20,300 (  10)   | ask      46.7400     32,300 (  10)
+         bid      46.6600     22,546 (   8)   | ask      46.7500     38,847 (  17)
+  NVDA   locate 5628  resting 18,553 | levels bid 1578 ask 1861 | overflow levels 69 | BBO 137.4100 x 100 / 137.4600 x 7,000
+         bid     137.4100        100 (   1)   | ask     137.4600      7,000 (   4)
+         bid     137.3900        600 (   2)   | ask     137.4700      9,596 (   6)
+         bid     137.3800        100 (   1)   | ask     137.4800      4,579 (   6)
+         bid     137.3700        100 (   1)   | ask     137.4900      5,300 (   5)
+         bid     137.3600      3,286 (   4)   | ask     137.5000      9,119 (  28)
+  TSLA   locate 7804  resting 18,236 | levels bid 1606 ask 1600 | overflow levels 249 | BBO 308.7600 x 410 / 308.7700 x 2,000
+         bid     308.7600        410 (   3)   | ask     308.7700      2,000 (   1)
+         bid     308.7500        430 (   2)   | ask     308.8900      1,000 (   1)
+         bid     308.7300        100 (   1)   | ask     308.9200      2,510 (   6)
+         bid     308.7100        100 (   1)   | ask     308.9300        600 (   1)
+         bid     308.7000      1,535 (   5)   | ask     308.9400      2,984 (   3)
+  NFLX   locate 5430  resting 14,070 | levels bid 1431 ask 1405 | overflow levels 190 | BBO 340.5300 x 300 / 340.6600 x 529
+         bid     340.5300        300 (   3)   | ask     340.6600        529 (   1)
+         bid     340.5200         50 (   1)   | ask     340.6700      3,200 (   5)
+         bid     340.5000      1,062 (   2)   | ask     340.6800      5,715 (   2)
+         bid     340.4800        200 (   1)   | ask     340.6900      1,500 (   1)
+         bid     340.4500        650 (   2)   | ask     340.7000      4,092 (   6)
+  checkpoint  76 | message   368,366,634 | 20:05:00.000 | resting orders 0
+
+[3] totals
+  messages: pass 1 368,366,634 | pass 2 368,366,634 | trailing bytes 0
+  books: 8,695 | resting orders at end of file: 0
+  bad_length: pre-scan 0, dispatch 0 | dropped_out_of_band 0 | unknown order id 0
+  adds on the ladder 191,722,488 | in the overflow 196,611 (0.102% of 191,919,099; sizing predicted 196,611)
+  checkpoints 76 (no differential)
+  dispatch time 44.656 s for 368,366,634 messages (121.2 ns/msg)
+  final books (end of file):
+  AAPL   locate 14    resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  MSFT   locate 5217  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  AMZN   locate 381   resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  GOOGL  locate 3420  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  FB     locate 2728  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  INTC   locate 4118  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  CSCO   locate 1718  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  NVDA   locate 5628  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  TSLA   locate 7804  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  NFLX   locate 5430  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  wall time 181 s
+
+RESULT: PASS
+exit status 0
