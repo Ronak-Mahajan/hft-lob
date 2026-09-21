@@ -36,10 +36,15 @@
 // (std::chrono::steady_clock elsewhere) in five 1 s windows before the pass,
 // and over the whole timed pass.
 //
+// --placement first-add places every ladder without looking ahead in the file
+// (see place_at_first_add()); the default, prescan, is lob_replay's sizing.
+//
 // Usage:
 //   lob_perf FILE [--mode single|demux|presplit] [--cpu N] [--cpus a,b,...]
 //                 [--workers 1,2,4] [--chunk-mb N] [--ladder-mb N]
+//                 [--placement prescan|first-add]
 //   lob_perf_latency FILE [--cpu N] [--chunk-mb N] [--ladder-mb N]
+//                         [--placement prescan|first-add]
 // ---------------------------------------------------------------------------
 #if defined(_WIN32) && !defined(_WIN32_WINNT)
   #define _WIN32_WINNT 0x0A00             // Windows 10: GetSystemCpuSetInformation
@@ -238,6 +243,7 @@ struct Options {
     std::vector<unsigned> workers = {1, 2, 4};
     size_t chunk = size_t{256} << 20;
     uint64_t ladder_mb = 1024;
+    bool first_add = false;             // --placement first-add (see place_at_first_add)
 };
 
 struct Day {
@@ -246,14 +252,76 @@ struct Day {
     uint64_t adds = 0, predicted_ladder_adds = 0, n_books = 0;
 };
 
+// --placement first-add: ladders placed without looking ahead. size_books()
+// places each ladder on the window of prices where that symbol's adds arrived
+// during the day and sizes its width from the day's price spread, which a live
+// feed handler cannot know in advance. This placement uses only what is known
+// when a symbol's first add arrives: every book gets the same width, the
+// largest power of two whose ladders fit the budget across all books; the
+// grid is one cent if the first add is at or above $1.00 and $0.0001 below;
+// and the ladder is centered on the first add. Pool and id-map capacities
+// still come from the pre-scan (they size memory, not where a price rests),
+// and the adds the ladders cover are counted again for this placement, so the
+// run still checks its overflow count against a prediction.
+struct FirstAdd {
+    bool     has_book = false;
+    uint32_t base = 0, tick = 100, band = 64;
+    uint64_t covered = 0;               // the day's adds on this ladder
+};
+
+std::vector<FirstAdd> place_at_first_add(const DayScan& d, uint64_t budget_bytes, uint32_t& band_out) {
+    uint64_t n_books = 0;
+    for (const SymbolScan& s : d.sym) if (s.order_msgs) ++n_books;
+    uint32_t band = 64;
+    while (band < (64u << kMaxK) &&
+           static_cast<double>(n_books) * (2.0 * band) * kBytesPerTick <= static_cast<double>(budget_bytes))
+        band *= 2;
+    band_out = band;
+    std::vector<FirstAdd> f(65536);
+    for (int loc = 0; loc < 65536; ++loc) {
+        const SymbolScan& s = d.sym[loc];
+        if (!s.order_msgs) continue;
+        FirstAdd& a = f[loc];
+        a.has_book = true;
+        a.band = band;
+        if (s.prices.empty()) continue;                  // no adds: any placement will do
+        const uint32_t first = s.prices.front();         // the pre-scan keeps adds in file order
+        a.tick = first < 10000 ? 1 : 100;
+        uint64_t start = first / a.tick;
+        start = start >= band / 2 ? start - band / 2 : 0;
+        const uint64_t max_start = ((uint64_t{1} << 32) - uint64_t{band} * a.tick) / a.tick;
+        if (start > max_start) start = max_start;
+        a.base = static_cast<uint32_t>(start * a.tick);
+        for (uint32_t px : s.prices)
+            if (px % a.tick == 0 && px / a.tick >= start && px / a.tick < start + band) ++a.covered;
+    }
+    return f;
+}
+
 void setup(const Options& o, Day& day) {
     const auto s0 = clk::now();
     prescan(o.path.c_str(), o.chunk, day.scan);
     const double scan_s = std::chrono::duration<double>(clk::now() - s0).count();
     const DayScan& d = day.scan;
     for (const SymbolScan& s : d.sym) day.adds += s.adds;
+    std::vector<FirstAdd> fa;
+    uint32_t fa_band = 0;
+    if (o.first_add) fa = place_at_first_add(d, o.ladder_mb * 1'000'000ull, fa_band);   // before size_books sorts the prices
     double ladder_mb = 0;
     day.z = size_books(day.scan, o.ladder_mb * 1'000'000ull, ladder_mb);
+    if (o.first_add) {
+        uint64_t n = 0;
+        for (int loc = 0; loc < 65536; ++loc) {
+            if (!fa[loc].has_book) continue;
+            Sizing& q = day.z[loc];
+            q.base = fa[loc].base;
+            q.tick = fa[loc].tick;
+            q.band = fa[loc].band;
+            q.ladder_adds = fa[loc].covered;
+            ++n;
+        }
+        ladder_mb = static_cast<double>(n) * fa_band * kBytesPerTick / 1e6;
+    }
     uint64_t pool_slots = 0, idmap_slots = 0;
     for (const Sizing& q : day.z) {
         if (!q.has_book) continue;
@@ -262,8 +330,16 @@ void setup(const Options& o, Day& day) {
         pool_slots += q.pool;
         idmap_slots += uint64_t{1} << q.idmap_log2;
     }
-    std::printf("pre-scan and sizing (untimed, %.1f s; the same as lob_replay's)\n",
-                std::chrono::duration<double>(clk::now() - s0).count());
+    if (!o.first_add)
+        std::printf("pre-scan and sizing (untimed, %.1f s; the same as lob_replay's)\n",
+                    std::chrono::duration<double>(clk::now() - s0).count());
+    else
+        std::printf("pre-scan and sizing (untimed, %.1f s; ladders placed at each symbol's first add, "
+                    "not lob_replay's placement)\n"
+                    "  placement first-add: every ladder %s ticks, centered on the symbol's first add price, "
+                    "grid $0.01 if that price is at least $1.00 and $0.0001 below; pool and id-map "
+                    "capacities from the pre-scan\n",
+                    std::chrono::duration<double>(clk::now() - s0).count(), num(fa_band).c_str());
     std::printf("  file %s | chunk %s bytes | ladder budget %s MB\n", o.path.c_str(), num(o.chunk).c_str(),
                 num(o.ladder_mb).c_str());
     std::printf("  bytes %s | messages %s | trailing bytes %s | bad_length %s | pre-scan %.1f s\n",
@@ -745,10 +821,16 @@ int main(int argc, char** argv) {
         else if (a == "--workers") o.workers = parse_list(val());
         else if (a == "--chunk-mb") o.chunk = size_t{std::max<uint64_t>(1, std::strtoull(val().c_str(), nullptr, 10))} << 20;
         else if (a == "--ladder-mb") o.ladder_mb = std::strtoull(val().c_str(), nullptr, 10);
+        else if (a == "--placement") {
+            const std::string p = val();
+            if (p != "prescan" && p != "first-add") { std::printf("--placement: prescan or first-add\n"); return 2; }
+            o.first_add = p == "first-add";
+        }
         else if (!a.empty() && a[0] != '-' && o.path.empty()) o.path = a;
         else {
             std::printf("usage: %s FILE [--mode single|demux|presplit|latency] [--cpu N] [--cpus a,b,...] "
-                        "[--workers 1,2,4] [--chunk-mb N] [--ladder-mb N]\n", argv[0]);
+                        "[--workers 1,2,4] [--chunk-mb N] [--ladder-mb N] [--placement prescan|first-add]\n",
+                        argv[0]);
             return 2;
         }
     }
