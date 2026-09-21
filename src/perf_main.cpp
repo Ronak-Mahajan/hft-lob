@@ -23,9 +23,10 @@
 //   --mode latency   per-message latency. Only in the lob_perf_latency
 //                    build (-DLOB_PERF_LATENCY): every message is timed alone
 //                    with rdtsc_begin()/rdtsc_end() (lfence; rdtsc ... rdtscp;
-//                    lfence), the minimum cost of an empty timer pair is
-//                    subtracted, and the cycles go into an exact histogram
-//                    per message type.
+//                    lfence), the raw cycles go into an exact histogram per
+//                    message type, and the minimum cost of an empty timer
+//                    pair (the smaller of two calibrations, before and after
+//                    the pass) is subtracted when the percentiles are read.
 //
 // After every chunk (untimed) the tool prints books_digest(), a digest of the
 // full state of every book; lob_replay --differential prints the same
@@ -683,6 +684,19 @@ struct Hist {
         for (uint32_t i = kHistMax; i-- > 0;) if (bucket[i]) return i;
         return 0;
     }
+    // Mean of max(sample - ovh, 0), and the number of samples <= ovh.
+    long double mean_minus(uint64_t ovh) const {
+        long double s = 0;
+        for (uint32_t i = 0; i < kHistMax; ++i) if (i > ovh) s += static_cast<long double>(bucket[i]) * (i - ovh);
+        for (uint64_t v : big) if (v > ovh) s += v - ovh;
+        return n ? s / n : 0;
+    }
+    uint64_t at_most(uint64_t ovh) const {
+        uint64_t c = 0;
+        for (uint32_t i = 0; i < kHistMax && i <= ovh; ++i) c += bucket[i];
+        for (uint64_t v : big) if (v <= ovh) ++c;
+        return c;
+    }
 };
 
 uint64_t timer_overhead(std::vector<uint64_t>& samples) {
@@ -695,6 +709,18 @@ uint64_t timer_overhead(std::vector<uint64_t>& samples) {
     }
     std::sort(samples.begin(), samples.end());
     return best;
+}
+
+// The TSC ticks at a fixed rate while the core's clock follows the power
+// plan, so an empty timer pair costs about twice as many TSC cycles on a core
+// running at half its clock. A calibration taken just after the pre-scan's
+// file reads can catch the core before it has clocked up. So the pinned core
+// first spins for 0.5 s, the pair is measured then and again after the pass,
+// and the smaller of the two minimums is subtracted from every sample: it can
+// under-subtract relative to the fastest state seen, never over-subtract.
+void busy_spin(double seconds) {
+    const auto t0 = clk::now();
+    while (std::chrono::duration<double>(clk::now() - t0).count() < seconds) { /* spin */ }
 }
 
 int run_latency(const Options& o, const Day& day, unsigned cpu) {
@@ -710,22 +736,22 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
     const char types[] = "AFECXDU";
     for (int s = 0; s < 7; ++s) slot_of[static_cast<uint8_t>(types[s])] = static_cast<uint8_t>(s);
 
-    std::vector<uint64_t> ovh_samples;
-    const uint64_t ovh = timer_overhead(ovh_samples);
+    std::vector<uint64_t> pre_samples;
+    busy_spin(0.5);
+    const uint64_t pre = timer_overhead(pre_samples);
     std::printf("per-message latency | thread %s cpu %u | every message timed\n",
                 pinned ? "pinned to" : "NOT pinned, asked for", cpu);
     std::printf("  timed region per message: the book lookup by stock_locate and "
                 "itch::dispatch_checked<WireUnits>(), between rdtsc_begin() (lfence; rdtsc) and "
                 "rdtsc_end() (rdtscp; lfence)\n");
     std::printf("  empty timer pair, 100,000 samples: min %" PRIu64 " | p50 %" PRIu64 " | p99 %" PRIu64
-                " cycles; the min (%" PRIu64 ") is subtracted from every sample, clamped at 0\n",
-                ovh, ovh_samples[ovh_samples.size() / 2], ovh_samples[ovh_samples.size() * 99 / 100], ovh);
+                " cycles (before the pass, after 0.5 s of busy spinning; measured again after the pass)\n",
+                pre, pre_samples[pre_samples.size() / 2], pre_samples[pre_samples.size() * 99 / 100]);
     std::fflush(stdout);
 
     std::vector<Hist> hist(kSlots);
     ChunkReader rd(o.path.c_str(), o.chunk);
     EndState e;
-    uint64_t zero = 0;
     const uint8_t* consumed = nullptr;
     const Stamp s0 = stamp();
     while (rd.next(consumed)) {
@@ -745,9 +771,7 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
                 ++e.bad_length;
             }
             const uint64_t c1 = rdtsc_end();
-            const uint64_t c = c1 - c0 > ovh ? c1 - c0 - ovh : 0;
-            zero += c == 0;
-            hist[slot_of[len ? m[0] : 0]].add(c);
+            hist[slot_of[len ? m[0] : 0]].add(c1 - c0);  // raw; the overhead is subtracted at the end
             p = m + len;
             ++e.messages;
         }
@@ -762,6 +786,9 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
     e.trailing = rd.trailing();
     tally_books(books.data(), e);
     const double ghz = ghz_between(s0, s1);
+    std::vector<uint64_t> post_samples;
+    const uint64_t post = timer_overhead(post_samples);
+    const uint64_t ovh = std::min(pre, post);
 
     Hist order, all;
     for (int s = 0; s < 7; ++s) order.merge(hist[s]);
@@ -774,12 +801,21 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
                 "not throughput)\n", cpu);
     std::printf("  TSC over the whole pass (%.1f s): %.6f GHz; ns = cycles / %.6f\n",
                 std::chrono::duration<double>(s1.t - s0.t).count(), ghz, ghz);
-    std::printf("  samples clamped to 0 after overhead subtraction: %s\n", num(zero).c_str());
+    std::printf("  empty timer pair after the pass, 100,000 samples: min %" PRIu64 " | p50 %" PRIu64
+                " | p99 %" PRIu64 " cycles; the smaller min (%" PRIu64 ", of %" PRIu64 " before and %" PRIu64
+                " after) is subtracted from every sample, clamped at 0\n",
+                post, post_samples[post_samples.size() / 2], post_samples[post_samples.size() * 99 / 100],
+                ovh, pre, post);
+    std::printf("  samples clamped to 0 after overhead subtraction: %s\n", num(all.at_most(ovh)).c_str());
     std::printf("  percentiles are nearest-rank over every sample\n");
     auto row = [&](const char* name, const Hist& h, bool ns) {
-        auto f = [&](uint64_t c) { return ns ? static_cast<double>(c) / ghz : static_cast<double>(c); };
+        auto f = [&](uint64_t raw) {
+            const uint64_t c = raw > ovh ? raw - ovh : 0;
+            return ns ? static_cast<double>(c) / ghz : static_cast<double>(c);
+        };
+        const double mean = static_cast<double>(h.mean_minus(ovh));
         std::printf("  %-6s %12s | %8.1f | %7.0f | %7.0f | %7.0f | %7.0f | %8.0f | %8.0f | %10.0f\n", name,
-                    num(h.n).c_str(), ns ? static_cast<double>(h.sum / h.n) / ghz : static_cast<double>(h.sum / h.n),
+                    num(h.n).c_str(), ns ? mean / ghz : mean,
                     f(h.min()), f(h.quantile(0.50)), f(h.quantile(0.90)), f(h.quantile(0.99)),
                     f(h.quantile(0.999)), f(h.quantile(0.9999)), f(h.max()));
     };
