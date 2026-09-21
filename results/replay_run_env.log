@@ -1,0 +1,90 @@
+Environment for replay_20190130_differential.log, closing_cross_replay_20190130.log, replay_fixture.log and
+replay_selftest.log (the runs of the same names below; lob_bench_quick is lob_bench --quick, which runs every check
+and whose log is not in results/). The binaries were built into a scratch directory, shown below as bin/. The two
+replays of the recorded day ran with the directory holding 01302019.NASDAQ_ITCH50 as their working directory; the
+other runs ran from a scratch directory.
+--- build (source: git archive of commit 5b78e5a29b4570d531f61e207b75775cc5ee948d into a clean directory)
++ g++ --version
++ head -1
+g++.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r4) 16.1.0
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="5b78e5a29b4570d531f61e207b75775cc5ee948d"' src/replay_main.cpp -o bin/lob_replay.exe
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include src/main.cpp -o bin/lob_bench.exe
++ set +x
+--- run order (local time)
+Mon Sep 21 04:15:04 CDT 2026 start replay_fixture: bin/lob_replay.exe --fixture
+Mon Sep 21 04:15:05 CDT 2026 end replay_fixture
+Mon Sep 21 04:15:11 CDT 2026 start replay_selftest: bin/lob_replay.exe --selftest
+Mon Sep 21 04:15:18 CDT 2026 end replay_selftest
+Mon Sep 21 04:15:25 CDT 2026 start lob_bench_quick: bin/lob_bench.exe --quick
+Mon Sep 21 04:15:27 CDT 2026 end lob_bench_quick
+Mon Sep 21 04:15:33 CDT 2026 start replay_differential: bin/lob_replay.exe 01302019.NASDAQ_ITCH50 --differential
+Mon Sep 21 04:29:03 CDT 2026 end replay_differential
+Mon Sep 21 04:29:10 CDT 2026 start closing_cross_replay: bin/lob_replay.exe 01302019.NASDAQ_ITCH50 --symbols AAPL,MSFT,AMZN,GOOGL,FB,INTC,CSCO,NVDA,TSLA,NFLX --at 12:00:00,16:00:00 --cpu 0
+Mon Sep 21 04:32:16 CDT 2026 end closing_cross_replay
+--- before each run: power line status, power plan, and the processes that used the most CPU in the 5 s before it
+=== replay_fixture 2026-09-21 04:14:57
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+claude                0.19
+chrome                0.16
+kass                  0.12
+powershell            0.08
+PhoneExperienceHost   0.03
+claude                0.03
+
+
+
+=== replay_selftest 2026-09-21 04:15:05
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+claude       0.25
+chrome       0.12
+kass         0.09
+claude       0.06
+powershell   0.05
+explorer     0.05
+
+
+
+=== lob_bench_quick 2026-09-21 04:15:18
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome         0.77
+kass           0.31
+claude         0.28
+nvsphelper64   0.11
+powershell     0.08
+explorer       0.08
+
+
+
+=== replay_differential 2026-09-21 04:15:27
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome                 0.5
+kass                   0.2
+claude                 0.2
+nvsphelper64          0.09
+powershell            0.08
+PhoneExperienceHost   0.06
+
+
+
+=== closing_cross_replay 2026-09-21 04:29:03
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+claude        0.31
+chrome        0.31
+kass          0.12
+powershell    0.06
+explorer      0.06
+nvcontainer   0.03
+
+
+
+ALL DONE

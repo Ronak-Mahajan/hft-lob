@@ -16,13 +16,16 @@
 // Pass 2: the same bytes through itch::dispatch_checked<WireUnits>, the
 // dispatch the benchmarks use, into the book of each message's stock_locate.
 // Only the dispatch loop over a chunk already in memory is timed; reading the
-// file never is. With --differential, the ref::Market model (src/ref_market.hpp)
-// is fed the same messages after each timed segment, and at every checkpoint
-// (every --checkpoint messages, at each --at time, and at the end) every book
-// is compared with it in full: both sides level by level, the queue order of
-// every level order by order, the BBO and the resting-order count
-// (src/book_diff.hpp). Timings from a differential run are not measurements:
-// the model's work between segments evicts the books from cache.
+// file never is. With --differential, the books and the ref::Market model
+// (src/ref_market.hpp) take the file one message at a time. After every order
+// message, what it touched is compared (the book's resting-order count and
+// BBO, the orders it names, and the price levels it changed; diff_touch() in
+// src/book_diff.hpp), and at every checkpoint (every --checkpoint messages, at
+// each --at time, and at the end) every book is compared with the model in
+// full: both sides level by level, the queue order of every level order by
+// order, the BBO and the resting-order count (diff_book()). Timings from a
+// differential run are not measurements: the model's work between messages
+// evicts the books from cache.
 // After every chunk a digest of the full state of every book is printed
 // (books_digest() in src/replay_day.hpp); lob_perf prints the same digests,
 // so its runs can be checked against this one.

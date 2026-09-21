@@ -2,9 +2,9 @@
   crafted file: 2255 bytes, 65 messages (A 31, F 1, U 6, E 4, C 2, X 2, D 4, and S, R, Q, I, P), 38 adds
 
 === lob_replay: NASDAQ TotalView-ITCH 5.0 day replay with ref::Market differential ===
-run: 2026-09-21 03:27:51 local | cpu: Intel(R) Core(TM) Ultra 7 265H | compiler: g++ 16.1.0
+run: 2026-09-21 04:15:05 local | cpu: Intel(R) Core(TM) Ultra 7 265H | compiler: g++ 16.1.0
 command: lob_replay --fixture
-source: git commit eaeb960f0c547dff9548ccea4e147455f7abe9e5
+source: git commit 5b78e5a29b4570d531f61e207b75775cc5ee948d
 file: lob_replay_fixture.itch
 chunk 2,255 bytes | checkpoint every 1 messages | ladder budget 0 MB
 
@@ -38,7 +38,7 @@ chunk 2,255 bytes | checkpoint every 1 messages | ladder budget 0 MB
          closing cross: none in this file
   NOSUCH not in this day's stock directory
 
-[2] replay, differential against ref::Market at every checkpoint | thread not pinned
+[2] replay, differential against ref::Market after every message and in full at every checkpoint | thread not pinned
   books at 09:45:00.000 ET (state after message 47):
   FXC    locate 1     resting 14 | levels bid 5 ask 5 | overflow levels 6 | BBO 100.1000 x 300 / 100.5000 x 150
          bid     100.1000        300 (   1)   | ask     100.5000        150 (   1)
@@ -68,7 +68,8 @@ chunk 2,255 bytes | checkpoint every 1 messages | ladder budget 0 MB
   reference applied: A 31  F 1  E 4  C 2  X 2  D 4  U 6
   reference anomalies: unknown ref 0 | duplicate ref 0 | over-execution 0 | locate mismatch 0 | bad side 0 | bad length 0
   checkpoints 65 | book comparisons 260 | levels compared 909 | orders compared in queue order 1,266 | mismatches 0
-  dispatch time 0.000 s for 65 messages (364.6 ns/msg) - differential run: not a measurement
+  after every order message: 50 messages checked (resting count and BBO of the book, the orders and price levels the message touched) | orders compared 56 | levels compared 56 | mismatches 0
+  dispatch time 0.000 s for 65 messages (390.8 ns/msg) - differential run: not a measurement
   final books (end of file):
   FXC    locate 1     resting 10 | levels bid 5 ask 4 | overflow levels 4 | BBO 100.1000 x 300 / 100.6200 x 20
          bid     100.1000        300 (   1)   | ask     100.6200         20 (   1)

@@ -11,42 +11,55 @@ Raw output behind every number on this page:
   lines, the order messages after 16:00 and the book when each cross was
   published.
 - `closing_cross_replay_20190130.log`: `lob_replay` (built from commit
-  eaeb960) on the same file, with the ten symbols below named. Source of the
+  5b78e5a) on the same file, with the ten symbols below named. Source of the
   replayed books at 16:00:00.000 ET.
-- `official_close_yahoo_20190130.log`: the official closes, fetched from
-  Yahoo Finance by `tools/official_close_yahoo.sh`, with the request URLs
-  and the split arithmetic.
+- `official_close_nasdaq_20190130.log`: the official closes from Nasdaq's
+  own historical quotes, fetched by `tools/official_close_nasdaq.sh`, with
+  the request URLs, the rows as served and the split arithmetic.
+- `official_close_yahoo_20190130.log`: the same closes from Yahoo Finance,
+  fetched by `tools/official_close_yahoo.sh`, with the request URLs and the
+  split arithmetic.
 
 ## 1. Closing cross price vs official close
 
 The Cross Trade message ('Q') with cross type 'C' is NASDAQ's closing
 cross. For a NASDAQ-listed stock the closing cross price is the NASDAQ
-Official Closing Price, so the two should be equal to the cent.
+Official Closing Price, so the two should be equal to the cent. All ten
+symbols below are NASDAQ-listed.
 
-Official close source: Yahoo Finance daily bars
-(`query1.finance.yahoo.com/v8/finance/chart/SYMBOL`, interval 1d,
-2019-01-30). Yahoo's daily close is adjusted for later splits, so each is
-multiplied back by the product of the split ratios Yahoo lists after
-2019-01-30 (`events=split`) and rounded to the cent. FB has traded as META
-since 2022 and is fetched under that symbol.
+Official close sources, fetched separately:
 
-| Symbol | Closing cross in the file | Shares | Published (ET) | Yahoo close (split-adjusted) | Splits since | Official close | Difference |
-|---|---:|---:|---|---:|---|---:|---:|
-| AAPL  | 165.25  | 2,340,937 | 16:00:00.563 | 41.3125 | 4:1 | 165.25 | 0.00 |
-| MSFT  | 106.38  | 2,606,642 | 16:00:00.531 | 106.38 | none | 106.38 | 0.00 |
-| AMZN  | 1670.43 | 183,741   | 16:00:00.764 | 83.5215 | 20:1 | 1670.43 | 0.00 |
-| GOOGL | 1097.99 | 116,867   | 16:00:00.273 | 54.89950 | 20:1 | 1097.99 | 0.00 |
-| FB    | 150.42  | 1,017,765 | 16:00:00.357 | 150.42 (META) | none | 150.42 | 0.00 |
-| INTC  | 47.54   | 2,204,287 | 16:00:00.003 | 47.54 | none | 47.54 | 0.00 |
-| CSCO  | 46.71   | 1,937,262 | 16:00:00.414 | 46.71 | none | 46.71 | 0.00 |
-| NVDA  | 137.39  | 335,421   | 16:00:00.591 | 3.43475 | 4:1, 10:1 | 137.39 | 0.00 |
-| TSLA  | 308.77  | 74,672    | 16:00:00.366 | 20.584667 | 5:1, 3:1 | 308.77 | 0.00 |
-| NFLX  | 340.66  | 298,927   | 16:00:00.617 | 34.066 | 10:1 | 340.66 | 0.00 |
+- Nasdaq's historical quotes (`api.nasdaq.com/api/quote/SYMBOL/historical`,
+  the data behind nasdaq.com's historical-quotes pages), the 2019-01-30 row.
+- Yahoo Finance daily bars (`query1.finance.yahoo.com/v8/finance/chart/SYMBOL`,
+  interval 1d, 2019-01-30).
 
-All ten agree to the cent. As a second, unadjusted source for one of them,
-The Washington Post's report of 2019-01-30
-("Facebook reports robust profit, revenue gains; stock rises") gives FB's
-close that day as $150.42.
+Both serve closes adjusted for later splits (not dividends), so each is
+multiplied back by the product of the split ratios after 2019-01-30 and
+rounded to the cent. Nasdaq's adjusted figures carry at most four decimals,
+so for NVDA and TSLA the product is rounded (3.4347 x 40 = 137.388,
+20.5847 x 15 = 308.7705). FB has traded as META since 2022 and is fetched
+under that symbol.
+
+| Symbol | Closing cross in the file | Shares | Published (ET) | Nasdaq close (split-adjusted) | Yahoo close (split-adjusted) | Splits since | Official close, both sources | Difference |
+|---|---:|---:|---|---:|---:|---|---:|---:|
+| AAPL  | 165.25  | 2,340,937 | 16:00:00.563 | 41.3125 | 41.3125 | 4:1 | 165.25 | 0.00 |
+| MSFT  | 106.38  | 2,606,642 | 16:00:00.531 | 106.38 | 106.38 | none | 106.38 | 0.00 |
+| AMZN  | 1670.43 | 183,741   | 16:00:00.764 | 83.5215 | 83.5215 | 20:1 | 1670.43 | 0.00 |
+| GOOGL | 1097.99 | 116,867   | 16:00:00.273 | 54.8995 | 54.89950 | 20:1 | 1097.99 | 0.00 |
+| FB    | 150.42  | 1,017,765 | 16:00:00.357 | 150.42 (META) | 150.42 (META) | none | 150.42 | 0.00 |
+| INTC  | 47.54   | 2,204,287 | 16:00:00.003 | 47.54 | 47.54 | none | 47.54 | 0.00 |
+| CSCO  | 46.71   | 1,937,262 | 16:00:00.414 | 46.71 | 46.71 | none | 46.71 | 0.00 |
+| NVDA  | 137.39  | 335,421   | 16:00:00.591 | 3.4347 | 3.43475 | 4:1, 10:1 | 137.39 | 0.00 |
+| TSLA  | 308.77  | 74,672    | 16:00:00.366 | 20.5847 | 20.584667 | 5:1, 3:1 | 308.77 | 0.00 |
+| NFLX  | 340.66  | 298,927   | 16:00:00.617 | 34.066 | 34.066 | 10:1 | 340.66 | 0.00 |
+
+All ten agree to the cent, in both sources. BKNG, which the replay log
+also names, closes at 1818.70 in both (72.748 and 72.74800 before its
+25:1 split), equal to its closing cross in the file. As a third,
+unadjusted source for one of them, The Washington Post's report of
+2019-01-30 ("Facebook reports robust profit, revenue gains; stock rises")
+gives FB's close that day as $150.42.
 
 ## 2. Reconstructed book vs the closing cross
 
@@ -98,9 +111,13 @@ published satisfies bid <= cross price <= ask.
 ## Scope
 
 - Checked: the ten symbols above, their closing crosses from the file,
-  their official closes from one public source (plus one press report for
-  FB), and the inside market at 16:00:00.000 and at each cross.
+  their official closes from two public sources, Nasdaq and Yahoo Finance
+  (plus one press report for FB), and the inside market at 16:00:00.000 and
+  at each cross.
 - Not checked: opening crosses against an external source, symbols outside
   this list, and full depth at the cross beyond the inside market.
-- The official closes are Yahoo Finance's figures as served on 2026-09-21,
-  reversed through Yahoo's own split history.
+- The official closes are Nasdaq's and Yahoo Finance's figures as served on
+  2026-09-21, multiplied back through the splits listed in each log.
+- The cross prices are data in the file, so this page checks the input and
+  the books around the cross; the replay's correctness is checked against
+  the reference model (`replay_20190130_differential.log`).

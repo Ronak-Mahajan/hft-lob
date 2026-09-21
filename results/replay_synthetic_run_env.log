@@ -1,5 +1,6 @@
-Environment for replay_20190130_differential.log, closing_cross_replay_20190130.log,
-synthetic_lob_bench_run_{1,2,3}.log, synthetic_lob_parallel_run_1.log, replay_fixture.log and replay_selftest.log.
+Environment for synthetic_lob_bench_run_{1,2,3}.log and synthetic_lob_parallel_run_1.log. The same batch
+also ran the lob_replay runs listed below (differential, closing-cross replay, --fixture, --selftest) from
+eaeb960; the logs of those names in results/ are later runs from 5b78e5a, recorded in replay_run_env.log.
 The binaries were built into a scratch directory, shown below as bin/. The two replays ran with
 the directory holding 01302019.NASDAQ_ITCH50 as their working directory; lob_bench, lob_parallel
 and the two built-in replay tests ran from a scratch directory.

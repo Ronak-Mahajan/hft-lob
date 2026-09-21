@@ -63,6 +63,8 @@ struct ReplayReport {
     uint64_t adds = 0, overflow_adds = 0, predicted_overflow = 0;
     uint64_t dropped = 0, unknown = 0, bad_length = 0, resting = 0;
     uint64_t checkpoints = 0, mismatches = 0;
+    uint64_t touch_checked = 0;         // order messages followed by the per-message check
+    uint64_t touch_mismatches = 0;      // ... that found a difference
     uint64_t chunks = 0;
     uint64_t cuts = 0;                  // chunk boundaries that fell inside a message
     uint64_t prefix_cuts = 0;           // ... between the two bytes of its length prefix
@@ -258,16 +260,18 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
     }
     if (o.cpu >= 0)
         SAY("[2] replay%s | thread %s cpu %d\n",
-            o.differential ? ", differential against ref::Market at every checkpoint" : "",
+            o.differential ? ", differential against ref::Market after every message and in full at every checkpoint" : "",
             pinned ? "pinned to" : "not pinned, asked for", o.cpu);
     else
         SAY("[2] replay%s | thread not pinned\n",
-            o.differential ? ", differential against ref::Market at every checkpoint" : "");
+            o.differential ? ", differential against ref::Market after every message and in full at every checkpoint" : "");
     if (!o.quiet) std::fflush(stdout);
 
     ChunkReader rd(o.path.c_str(), o.chunk);
     if (!rd.ok()) { std::printf("cannot open %s\n", o.path.c_str()); return 2; }
     uint64_t n = 0, bad_length = 0, mismatches = 0, checkpoints = 0, printed = 0;
+    uint64_t touch_mismatches = 0;      // per-message checks that found a difference
+    TouchTotals touched;                // what the per-message checks compared
     uint64_t last_ts = 0;
     uint64_t chunks = 0, cuts = 0, prefix_cuts = 0;
     Digest chain;                       // over every chunk boundary digest
@@ -348,7 +352,9 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
                 }
                 continue;
             }
-            const uint64_t room = next_cp < cps.size() ? cps[next_cp] - n : ~uint64_t{0};
+            // With the reference, one message at a time, so that what each
+            // message touched can be compared as soon as both have applied it.
+            const uint64_t room = refm ? 1 : next_cp < cps.size() ? cps[next_cp] - n : ~uint64_t{0};
             const uint8_t* seg = p;
             const uint64_t n0 = n;
             const auto t0 = clock::now();
@@ -357,11 +363,25 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
             timed_s += std::chrono::duration<double>(t1 - t0).count();
             if (n == n0) break;                                   // nothing whole left in this chunk
             if (((last[-2] << 8) | last[-1]) >= 11) last_ts = itch::timestamp_ns(last);
-            if (refm) {                                           // same messages, untimed
-                for (const uint8_t* q = seg; q < p;) {
-                    const uint16_t len = static_cast<uint16_t>((q[0] << 8) | q[1]);
-                    refm->on_message(q + 2, len);
-                    q += 2 + len;
+            if (refm) {                                           // the same message, untimed
+                const uint16_t len = static_cast<uint16_t>((seg[0] << 8) | seg[1]);
+                const Touch t = touch_before(*refm, seg + 2, len);
+                refm->on_message(seg + 2, len);
+                if (t.check && books[t.locate]) {
+                    const std::string diff = diff_touch(*books[t.locate], *refm, t, touched);
+                    if (!diff.empty()) {
+                        ++touch_mismatches;
+                        if (++printed <= 20)
+                            std::printf("  MISMATCH after message %s (%c, locate %u, %s): %s\n",
+                                        num(n).c_str(), static_cast<char>(t.type),
+                                        static_cast<unsigned>(t.locate), d.sym[t.locate].name.c_str(),
+                                        diff.c_str());
+                    }
+                } else if (t.check) {
+                    ++touch_mismatches;                           // an order message with no book
+                    if (++printed <= 20)
+                        std::printf("  MISMATCH after message %s: locate %u has no book\n",
+                                    num(n).c_str(), static_cast<unsigned>(t.locate));
                 }
             }
         }
@@ -416,6 +436,11 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
             "orders compared in queue order %s | mismatches %s\n",
             num(checkpoints).c_str(), num(total.books).c_str(), num(total.levels).c_str(),
             num(total.orders).c_str(), num(mismatches).c_str());
+        SAY("  after every order message: %s messages checked (resting count and BBO of the book, "
+            "the orders and price levels the message touched) | orders compared %s | "
+            "levels compared %s | mismatches %s\n",
+            num(touched.messages).c_str(), num(touched.orders).c_str(), num(touched.levels).c_str(),
+            num(touch_mismatches).c_str());
     } else {
         SAY("  checkpoints %s (no differential)\n", num(checkpoints).c_str());
     }
@@ -438,9 +463,13 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
         const ref::Counters& c = refm->counters();
         pass = pass && mismatches == 0 && c.unknown_ref == 0 && c.duplicate_ref == 0 &&
                c.over_execution == 0 && c.locate_mismatch == 0 && c.bad_side == 0 &&
-               c.bad_length == 0 && refm->live_orders() == resting;
-        for (char t : {'A', 'F', 'E', 'C', 'X', 'D', 'U'})
+               c.bad_length == 0 && refm->live_orders() == resting && touch_mismatches == 0;
+        uint64_t order_msgs = 0;
+        for (char t : {'A', 'F', 'E', 'C', 'X', 'D', 'U'}) {
             pass = pass && c.seen[static_cast<uint8_t>(t)] == d.by_type[static_cast<uint8_t>(t)];
+            order_msgs += d.by_type[static_cast<uint8_t>(t)];
+        }
+        pass = pass && touched.messages == order_msgs;       // every order message was checked
     }
     SAY("\n%s\n", pass ? "RESULT: PASS" : "RESULT: FAIL");
 
@@ -459,6 +488,8 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
         report->resting = resting;
         report->checkpoints = checkpoints;
         report->mismatches = mismatches;
+        report->touch_checked = touched.messages;
+        report->touch_mismatches = touch_mismatches;
         report->chunks = chunks;
         report->cuts = cuts;
         report->prefix_cuts = prefix_cuts;
