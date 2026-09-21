@@ -47,9 +47,12 @@ Machine: Intel Core Ultra 7 265H laptop (6 P-cores, 8 E-cores, 2 low-power
 E-cores, no SMT), Windows 11, on AC power; g++ 16.1.0, `-O3 -march=native`.
 One recorded day. Every book's capacity, and where its price ladder sits,
 comes from a pre-scan of the same file (see *Recorded-day replay*), which a
-live feed handler cannot do: it would size from the previous day. Not
-measured: memory use, the core clock during the runs, file-read time, and
-any other machine or OS. The multi-core configurations ran once each.
+live feed handler cannot do: it would size from the previous day. Placed
+instead at each symbol's first add, the ladders catch fewer than half the
+adds and one P-core applies the day at 4.04M messages/second (see
+*Recorded-day performance*). Not measured: memory use, the core clock during
+the runs, file-read time, and any other machine or OS. The multi-core
+configurations ran once each.
 
 | Figures | Committed console output |
 |---|---|
@@ -194,11 +197,12 @@ logical CPU 2, an E-core, measured 6.30M messages/second (158.61 ns/message;
 (`-DLOB_PERF_LATENCY`), times every one of the day's 368,366,634 messages on
 its own, with no sampling: `lfence; rdtsc`, the book lookup and
 `dispatch_checked`, then `rdtscp; lfence`. The minimum of 100,000 empty timer
-pairs (38 cycles) is subtracted from every sample. Cycles go into an exact
-histogram per message type, and percentiles are nearest-rank. The TSC is
-invariant; CPUID 15h reports 3.686400 GHz, and the tool measures it against
-`QueryPerformanceCounter`, in five 1 s windows and over the whole pass
-(3.686398 GHz in every run). Run 1
+pairs, measured once before the pass (38 cycles in run 1), is subtracted from
+every sample; later builds measure it throughout the pass (see below).
+Cycles go into an exact histogram per message type, and percentiles are
+nearest-rank. The TSC is invariant; CPUID 15h reports 3.686400 GHz, and the
+tool measures it against `QueryPerformanceCounter`, in five 1 s windows and
+over the whole pass (3.686398 GHz in every run). Run 1
 ([`results/perf_20190130_run_latency_1.log`](results/perf_20190130_run_latency_1.log)),
 in nanoseconds:
 
@@ -234,6 +238,40 @@ messages, p50 182 ns, p90 462, p99 1,058 and p99.9 1,502
 and the throughput build 8.87M messages/second
 ([`results/perf_20190130_repro_throughput.log`](results/perf_20190130_repro_throughput.log)),
 both with every chunk's book digest equal to the differential run's.
+
+**Timer cost under a changing clock.** The empty timer pair takes a fixed
+number of core cycles, so its cost in TSC cycles rises when the core clocks
+down. From commit `9f9ee75` the latency build measures the pair before the
+pass, after each of the 42 chunks and after the pass; within a single run
+its minimum after a chunk ranged from 34 to 82 cycles, or from 38 to 116.
+The build subtracts the smallest minimum seen, so a sample taken while the
+core ran slower keeps part of the timer's cost, and none has more than the
+fastest state's cost removed. Two runs of that build with the pre-scan
+placement measured, for all messages, p50 181 and 182 ns and p99 1,075 and
+1,060 ns
+([`results/perf_20190130_placement_prescan_latency_1.log`](results/perf_20190130_placement_prescan_latency_1.log),
+[`_2.log`](results/perf_20190130_placement_prescan_latency_2.log)), in line
+with run 1 above.
+
+**Ladder placement without look-ahead.** Every figure above uses the
+pre-scan's placement: each ladder sits where that symbol's adds arrived
+during the day, and its width follows how widely they spread.
+`--placement first-add` uses only what is known when a symbol's first add
+arrives: every ladder 2,048 ticks wide (the widest that fits the 1,024 MB
+budget across 8,695 books), centered on that first add, on a one-cent grid at
+or above $1.00 and $0.0001 below. The books are the same (every chunk's
+digest equals the differential run's), but the first add is a poor anchor:
+93,816,959 of the 191,919,099 adds land on a ladder and the rest take the
+overflow's `std::map`. With the same binary, back to back, one P-core applies
+the day at 4.04M messages/second against 9.02M with the pre-scan placement
+([`results/perf_20190130_placement_firstadd_throughput.log`](results/perf_20190130_placement_firstadd_throughput.log),
+[`results/perf_20190130_placement_prescan_throughput.log`](results/perf_20190130_placement_prescan_throughput.log)),
+and per-message latency for all messages is p50 235 ns, p90 805, p99 1,813
+and p99.9 2,626
+([`results/perf_20190130_placement_firstadd_latency.log`](results/perf_20190130_placement_firstadd_latency.log),
+run between the two pre-scan latency runs above). A live feed handler would
+place its ladders from the previous day's prices, which a one-day replay
+cannot test.
 
 **Multi-core.** The books are sharded by `stock_locate % W`, as in
 `engine.hpp`. *Demux*: one thread reads each chunk and routes every message
@@ -517,9 +555,12 @@ configurations for each W in `--workers 1,2,4` (default); `--cpu N` pins the
 single-core thread (default: the first fast core after CPU 0), `--cpus a,b,...`
 gives the multi-core CPU order (main thread first; default: fast cores
 first, from the OS's CPU sets); `--chunk-mb N` and `--ladder-mb N` as for
-`lob_replay`. `lob_perf_latency FILE` takes `--cpu`, `--chunk-mb` and
-`--ladder-mb`. Both print the machine, power state, TSC calibration and a
-book digest per chunk, and exit non-zero unless every check passes.
+`lob_replay`; `--placement first-add` places every ladder at its symbol's
+first add instead of where the pre-scan found the day's adds (default
+`prescan`). `lob_perf_latency FILE` takes `--cpu`, `--chunk-mb`,
+`--ladder-mb` and `--placement`. Both print the machine, power state, TSC
+calibration and a book digest per chunk, and exit non-zero unless every
+check passes.
 
 ## Reproducibility
 

@@ -94,6 +94,8 @@ Which commit each committed log was built from:
 | `synthetic_*.log` | `eaeb960` (build lines in `replay_synthetic_run_env.log`) |
 | `perf_20190130_run_*.log` | `d17968a` (printed in every log; build lines in `perf_20190130_run_env.log`) |
 | `perf_20190130_repro_*.log` | `18d6082` (printed in each log; build lines in `perf_20190130_repro_env.log`) |
+| `perf_20190130_placement_*_throughput.log` | `fec2f8b` (printed in each log; build lines in `perf_20190130_placement_env.log`) |
+| `perf_20190130_placement_*_latency*.log` | `9f9ee75` (printed in each log; build lines in `perf_20190130_placement_latency_env.log`) |
 | `itch_count_20190130.log` | `caa468f` (build line at the top of the log) |
 
 At the commit that last updated this manifest: `lob_replay` compiles exactly
@@ -101,10 +103,13 @@ the sources of `5b78e5a`. `lob_bench` differs from `eaeb960` only in the
 reference comparison code of its checks 6 and 7 (`src/book_diff.hpp`,
 `src/replay_run.hpp`), not in the code its benchmarks time. `lob_parallel`
 compiles exactly the sources of `eaeb960`. `lob_perf` differs from `d17968a`
-only in `clock_of()` in `src/replay_day.hpp`, which formats timestamps in log
-lines, and compiles exactly the sources of `18d6082`. `tools/itch_count.cpp`
-is unchanged since `caa468f`. To build exactly the source a log names,
-`git checkout` that commit first.
+in `clock_of()` in `src/replay_day.hpp`, which formats timestamps in log
+lines, and in the `--placement` option, whose default is the placement of
+every earlier run; its timed loops are unchanged. `lob_perf_latency` also
+measures the empty timer pair throughout the pass and subtracts it when the
+percentiles are read (`9f9ee75`). Both compile exactly the sources of
+`9f9ee75`. `tools/itch_count.cpp` is unchanged since `caa468f`. To build
+exactly the source a log names, `git checkout` that commit first.
 
 ## Reproducing every file in `results/`
 
@@ -131,6 +136,8 @@ Run from `data/`, with the decompressed file there:
 | `perf_20190130_run_multicore_presplit.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50 --mode presplit --workers 1,2,3,4,5,8,13` |
 | `perf_20190130_repro_latency.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, built from `18d6082` |
 | `perf_20190130_repro_throughput.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50`, built from `18d6082` |
+| `perf_20190130_placement_prescan_throughput.log`, `perf_20190130_placement_firstadd_throughput.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50`, then the same with `--placement first-add`, built from `fec2f8b` |
+| `perf_20190130_placement_prescan_latency_1.log`, `perf_20190130_placement_firstadd_latency.log`, `perf_20190130_placement_prescan_latency_2.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, the same with `--placement first-add`, then the first again, built from `9f9ee75` |
 
 No market data needed, from any directory:
 
@@ -147,6 +154,7 @@ No market data needed, from any directory:
 Recorded by the scripts that ran the batches:
 
 - `perf_20190130_run_env.log`, `perf_20190130_repro_env.log`,
+  `perf_20190130_placement_env.log`, `perf_20190130_placement_latency_env.log`,
   `replay_run_env.log` and `replay_synthetic_run_env.log`: the build lines,
   the run order, and before each run the power state, the power plan and the
   processes that used the most CPU in the preceding 5 s. Each batch ran back
