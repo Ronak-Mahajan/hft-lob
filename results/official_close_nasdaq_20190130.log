@@ -1,0 +1,48 @@
+=== official 2019-01-30 closes from Nasdaq's historical quotes, fetched 2026-09-21 04:14 CDT ===
+Rows are adjusted for later splits (not dividends); each close is multiplied back by the split ratios listed
+and rounded to the cent. FB is listed as META since 2022.
+
+AAPL  GET https://api.nasdaq.com/api/quote/AAPL/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$41.3125","volume":"243,201,920","open":"$40.8125","high":"$41.5375","low":"$40.0575"}
+      splits after 2019-01-30: 4:1 on 2020-08-31
+      factor 4 | unadjusted close 165.25
+MSFT  GET https://api.nasdaq.com/api/quote/MSFT/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$106.38","volume":"47,203,190","open":"$104.62","high":"$106.38","low":"$104.33"}
+      splits after 2019-01-30: none
+      factor 1 | unadjusted close 106.38
+AMZN  GET https://api.nasdaq.com/api/quote/AMZN/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$83.5215","volume":"114,340,840","open":"$81.15","high":"$83.8475","low":"$80.984"}
+      splits after 2019-01-30: 20:1 on 2022-06-06
+      factor 20 | unadjusted close 1670.43
+GOOGL  GET https://api.nasdaq.com/api/quote/GOOGL/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$54.8995","volume":"29,027,380","open":"$53.868","high":"$54.976","low":"$53.832"}
+      splits after 2019-01-30: 20:1 on 2022-07-18
+      factor 20 | unadjusted close 1097.99
+META  GET https://api.nasdaq.com/api/quote/META/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$150.42","volume":"41,676,170","open":"$146.22","high":"$150.95","low":"$145.6953"}
+      splits after 2019-01-30: none
+      factor 1 | unadjusted close 150.42
+INTC  GET https://api.nasdaq.com/api/quote/INTC/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$47.54","volume":"26,746,480","open":"$46.68","high":"$47.68","low":"$46.45"}
+      splits after 2019-01-30: none
+      factor 1 | unadjusted close 47.54
+CSCO  GET https://api.nasdaq.com/api/quote/CSCO/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$46.71","volume":"18,261,270","open":"$45.94","high":"$46.93","low":"$45.92"}
+      splits after 2019-01-30: none
+      factor 1 | unadjusted close 46.71
+NVDA  GET https://api.nasdaq.com/api/quote/NVDA/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$3.4347","volume":"968,438,800","open":"$3.3667","high":"$3.4493","low":"$3.2865"}
+      splits after 2019-01-30: 4:1 on 2021-07-20, 10:1 on 2024-06-10
+      factor 40 | unadjusted close 137.39
+TSLA  GET https://api.nasdaq.com/api/quote/TSLA/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$20.5847","volume":"158,910,521","open":"$20.03","high":"$20.60","low":"$19.8993"}
+      splits after 2019-01-30: 5:1 on 2020-08-31, 3:1 on 2022-08-25
+      factor 15 | unadjusted close 308.77
+NFLX  GET https://api.nasdaq.com/api/quote/NFLX/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$34.066","volume":"90,812,660","open":"$33.275","high":"$34.178","low":"$33.08"}
+      splits after 2019-01-30: 10:1 on 2025-11-17
+      factor 10 | unadjusted close 340.66
+BKNG  GET https://api.nasdaq.com/api/quote/BKNG/historical?assetclass=stocks&fromdate=2019-01-29&todate=2026-09-21&limit=9999
+      row {"date":"01/30/2019","close":"$72.748","volume":"7,403,375","open":"$73.0132","high":"$73.419","low":"$72.2232"}
+      splits after 2019-01-30: 25:1 on 2026-04-06
+      factor 25 | unadjusted close 1818.70
