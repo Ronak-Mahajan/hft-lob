@@ -17,17 +17,24 @@
 // 6. ExactOrderBook fuzz           - generated multi-symbol wire-unit stream
 //    (src/wire_gen.hpp) through ExactOrderBooks and the ref::Market model
 //    (src/ref_market.hpp); full depth and queue order audited periodically.
+// 7. Recorded-day replay path       - a crafted 65-message ITCH file through
+//    the lob_replay run (src/replay_fixture.hpp): sub-penny prices, prices
+//    far outside every ladder, replaces across the ladder boundary, chunks
+//    from 1 byte up, the reference compared after every message.
 //
-// Usage:  lob_bench [--quick]
+// Usage:  lob_bench [--quick] [--cpu N]
 //   --quick  CI mode: smaller message counts (fuzz 250k, latency 100k,
 //            throughput 1M, exact fuzz 200k) so the whole run finishes in
 //            seconds. Every correctness check still runs; only the sizes
 //            shrink, and the numbers it prints are not the README's
 //            measurements.
+//   --cpu N  pin the benchmark thread to logical CPU N (Windows builds;
+//            default 2).
 // ---------------------------------------------------------------------------
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -41,6 +48,7 @@
 
 #include "book_diff.hpp"
 #include "ref_market.hpp"
+#include "replay_fixture.hpp"
 #include "wire_gen.hpp"
 
 #ifdef _WIN32
@@ -82,11 +90,13 @@ static int g_failures = 0;
         }                                                                  \
     } while (0)
 
-static void pin_and_boost() {
+static void pin_and_boost(unsigned cpu) {
 #ifdef _WIN32
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
-    SetThreadAffinityMask(GetCurrentThread(), DWORD_PTR{1} << 2);  // pin to core 2
+    if (cpu < 64) SetThreadAffinityMask(GetCurrentThread(), DWORD_PTR{1} << cpu);
+#else
+    (void)cpu;
 #endif
 }
 
@@ -829,17 +839,36 @@ static void exact_book_fuzz(size_t n_msgs) {
                 (unsigned long long)live);
 }
 
+// ============================================================================
+// 7. The recorded-day replay path on a crafted file
+// ============================================================================
+// The same test `lob_replay --fixture` runs (src/replay_fixture.hpp): the
+// lob_replay run over a 65-message file built to contain sub-penny prices,
+// prices far outside every ladder and replaces across the ladder boundary,
+// read in chunks from 1 byte up, with the reference compared after every
+// message and the final books checked against levels written out by hand.
+// Its size does not depend on --quick.
+static void replay_fixture() {
+    std::printf("[7] Recorded-day replay path on a crafted ITCH file (lob_replay --fixture)\n");
+    const int rc = fixture::run(/*verbose=*/false, "lob_bench_fixture.itch", "lob_bench [7]");
+    CHECK(rc == 0, "crafted-file replay");
+    std::printf("\n");
+}
+
 int main(int argc, char** argv) {
     bool quick = false;
+    unsigned cpu = 2;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--quick") == 0) quick = true;
+        else if (std::strcmp(argv[i], "--cpu") == 0 && i + 1 < argc)
+            cpu = static_cast<unsigned>(std::strtoul(argv[++i], nullptr, 10));
         else {
-            std::printf("usage: %s [--quick]\n", argv[0]);
+            std::printf("usage: %s [--quick] [--cpu N]\n", argv[0]);
             return 2;
         }
     }
 
-    pin_and_boost();
+    pin_and_boost(cpu);
     double cpn = cycles_per_ns();
     std::printf("=== L2 Limit Order Book - verification & benchmarks%s ===\n",
                 quick ? " (--quick: CI sizes, not a measurement)" : "");
@@ -852,6 +881,7 @@ int main(int argc, char** argv) {
     throughput_bench(quick ? 1'000'000 : 10'000'000);
     exact_book_checks();
     exact_book_fuzz(quick ? 200'000 : 2'000'000);
+    replay_fixture();
 
     if (g_failures) { std::printf("*** %d FAILURE(S) ***\n", g_failures); return 1; }
     std::printf("All verification passed.\n");
