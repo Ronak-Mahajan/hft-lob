@@ -32,7 +32,7 @@
     "bytes": 11245883092,
     "sha256": "1d0972ffc25b35902ccc3f9069aae517da56903d5795f872902b8697315f30c3",
     "messages": 368366634,
-    "manifest": "results/manifest_20190130.md"
+    "manifest": "data/MANIFEST.md"
   },
   "machine": {
     "cpu": "Intel(R) Core(TM) Ultra 7 265H",
@@ -49,7 +49,7 @@
     "flags": "-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include",
     "latency_build_flags": "-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY",
     "git_commit": "d17968aa889b4492ddad62285739576a3bfa8dcd",
-    "binaries": "lob_perf (src/perf_main.cpp) for throughput and multi-core; lob_perf_latency (the same source with -DLOB_PERF_LATENCY) for per-message latency; lob_replay (src/replay_main.cpp) for the differential run"
+    "binaries": "lob_perf (src/perf_main.cpp) for throughput and multi-core and lob_perf_latency (the same source with -DLOB_PERF_LATENCY) for per-message latency, both built from git_commit; lob_replay (src/replay_main.cpp) for the differential run, built from correctness.differential_commit"
   },
   "tsc": {
     "invariant": "yes",
@@ -106,6 +106,7 @@
   "correctness": {
     "note": "every run below printed a digest of every book's full state (levels and queue order) after each of the 42 chunks; all of them equal the digests of the differential run, which compared every book against the reference model",
     "differential_log": "results/replay_20190130_differential.log",
+    "differential_commit": "eaeb960f0c547dff9548ccea4e147455f7abe9e5",
     "differential_checkpoints": 76,
     "differential_mismatches": 0,
     "digest_chain": "17b49d11d49913b3",

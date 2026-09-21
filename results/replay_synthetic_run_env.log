@@ -1,0 +1,110 @@
+Environment for replay_20190130_differential.log, closing_cross_replay_20190130.log,
+synthetic_lob_bench_run_{1,2,3}.log, synthetic_lob_parallel_run_1.log, replay_fixture.log and replay_selftest.log.
+The binaries were built into a scratch directory, shown below as bin/. The two replays ran with
+the directory holding 01302019.NASDAQ_ITCH50 as their working directory; lob_bench, lob_parallel
+and the two built-in replay tests ran from a scratch directory.
+--- build (source: git archive of commit eaeb960f0c547dff9548ccea4e147455f7abe9e5 into a clean directory)
++ g++ --version
++ head -1
+g++.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r4) 16.1.0
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="eaeb960f0c547dff9548ccea4e147455f7abe9e5"' src/replay_main.cpp -o bin/lob_replay.exe
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include src/main.cpp -o bin/lob_bench.exe
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include src/parallel_main.cpp -o bin/lob_parallel.exe
++ set +x
+--- run order (local time)
+Mon Sep 21 03:12:50 CDT 2026 start replay_differential: bin/lob_replay.exe 01302019.NASDAQ_ITCH50 --differential
+Mon Sep 21 03:22:46 CDT 2026 end replay_differential
+Mon Sep 21 03:22:53 CDT 2026 start closing_cross_replay: bin/lob_replay.exe 01302019.NASDAQ_ITCH50 --symbols AAPL,MSFT,AMZN,GOOGL,FB,INTC,CSCO,NVDA,TSLA,NFLX --at 12:00:00,16:00:00 --cpu 0
+Mon Sep 21 03:26:02 CDT 2026 end closing_cross_replay
+Mon Sep 21 03:26:09 CDT 2026 start lob_bench_1: bin/lob_bench.exe --cpu 1
+Mon Sep 21 03:26:16 CDT 2026 end lob_bench_1
+Mon Sep 21 03:26:23 CDT 2026 start lob_bench_2: bin/lob_bench.exe --cpu 1
+Mon Sep 21 03:26:29 CDT 2026 end lob_bench_2
+Mon Sep 21 03:26:36 CDT 2026 start lob_bench_3: bin/lob_bench.exe --cpu 1
+Mon Sep 21 03:26:42 CDT 2026 end lob_bench_3
+Mon Sep 21 03:26:49 CDT 2026 start lob_parallel_1: bin/lob_parallel.exe
+Mon Sep 21 03:27:27 CDT 2026 end lob_parallel_1
+--- before each run: power line status, power plan, and the processes that used the most CPU in the 5 s before it
+=== replay_differential 2026-09-21 03:12:43
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome                0.89
+kass                  0.62
+powershell            0.08
+PhoneExperienceHost   0.05
+Spotify               0.03
+WavesSvc64            0.03
+
+
+
+=== closing_cross_replay 2026-09-21 03:22:46
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome                 1.7
+kass                  0.61
+claude                0.36
+explorer              0.11
+powershell            0.06
+PhoneExperienceHost   0.06
+
+
+
+=== lob_bench_1 2026-09-21 03:26:02
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome                   1
+kass                  0.41
+claude                0.22
+explorer              0.08
+powershell            0.08
+PhoneExperienceHost   0.06
+
+
+
+=== lob_bench_2 2026-09-21 03:26:16
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome       0.98
+kass         0.59
+claude        0.2
+explorer     0.11
+claude       0.06
+powershell   0.06
+
+
+
+=== lob_bench_3 2026-09-21 03:26:29
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome         1.42
+kass           0.69
+claude         0.55
+explorer       0.12
+nvsphelper64   0.11
+Spotify        0.11
+
+
+
+=== lob_parallel_1 2026-09-21 03:26:42
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome                1.52
+kass                  0.62
+claude                0.19
+powershell            0.08
+PhoneExperienceHost   0.08
+CrossDeviceService    0.08
+
+
+
+ALL DONE
+Mon Sep 21 03:27:51 CDT 2026 start replay_fixture (after the batch, same binary): bin/lob_replay.exe --fixture
+Mon Sep 21 03:27:51 CDT 2026 end replay_fixture
+Mon Sep 21 03:29:48 CDT 2026 start replay_selftest (after the batch, same binary): bin/lob_replay.exe --selftest
+Mon Sep 21 03:29:53 CDT 2026 end replay_selftest

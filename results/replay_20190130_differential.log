@@ -1,9 +1,11 @@
 === lob_replay: NASDAQ TotalView-ITCH 5.0 day replay with ref::Market differential ===
-run: 2026-09-21 02:31:50 local | cpu: Intel(R) Core(TM) Ultra 7 265H | compiler: g++ 16.1.0
+run: 2026-09-21 03:12:51 local | cpu: Intel(R) Core(TM) Ultra 7 265H | compiler: g++ 16.1.0
+command: lob_replay 01302019.NASDAQ_ITCH50 --differential
+source: git commit eaeb960f0c547dff9548ccea4e147455f7abe9e5
 file: 01302019.NASDAQ_ITCH50
 chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,024 MB
 
-[1] pre-scan (untimed, 110.5 s)
+[1] pre-scan (untimed, 109.3 s)
   bytes 11,245,883,092 | messages 368,366,634 | trailing bytes 0
   message counts by type:
      A   162,970,455    B           116    C       158,886    D   158,273,361
@@ -16,7 +18,7 @@ chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,
   stock directory: 8,714 'R' messages for 8,713 stock_locates (1 repeated, 0 renamed) | locates with order messages: 8,695
   adds (A, F and the add half of U): 191,919,099 | peak resting orders, whole market: 1,742,866
   add prices that are not whole cents: 718,627 | outside $0.01..$1310.72: 587,096
-  sizing (12.1 s): 8,695 books | grid $0.01: 8,323, grid $0.0001: 372 | ladder 1024 MB | band ticks min 64 median 2,048 max 131,072
+  sizing (13.5 s): 8,695 books | grid $0.01: 8,323, grid $0.0001: 372 | ladder 1024 MB | band ticks min 64 median 2,048 max 131,072
   adds the chosen ladders cover: 191,722,488 of 191,919,099 (99.898%); the other 196,611 rest in the overflow
   pools 2,276,721 order slots (73 MB) | id maps 6,642,368 slots (106 MB)
 
@@ -222,13 +224,14 @@ chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,
 
 [3] totals
   messages: pass 1 368,366,634 | pass 2 368,366,634 | trailing bytes 0
+  chunks 42 | chunk boundaries inside a message 41 (inside its length prefix 1)
   books: 8,695 | resting orders at end of file: 0
   bad_length: pre-scan 0, dispatch 0 | dropped_out_of_band 0 | unknown order id 0
   adds on the ladder 191,722,488 | in the overflow 196,611 (0.102% of 191,919,099; sizing predicted 196,611)
   reference applied: A 162,970,455  F 1,725,898  E 8,096,995  C 158,886  X 4,669,874  D 158,273,361  U 27,222,746
   reference anomalies: unknown ref 0 | duplicate ref 0 | over-execution 0 | locate mismatch 0 | bad side 0 | bad length 0
   checkpoints 76 | book comparisons 660,820 | levels compared 49,562,417 | orders compared in queue order 119,295,162 | mismatches 0
-  dispatch time 62.247 s for 368,366,634 messages (169.0 ns/msg) - differential run: not a measurement
+  dispatch time 76.796 s for 368,366,634 messages (208.5 ns/msg) - differential run: not a measurement
   final books (end of file):
   AAPL   locate 14    resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
   MSFT   locate 5217  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
@@ -236,7 +239,7 @@ chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,
   BKNG   locate 894   resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
   WFT    locate 8401  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
   book digest chain over 42 chunk boundaries: 17b49d11d49913b3
-  wall time 581 s
+  wall time 594 s
 
 RESULT: PASS
 exit 0

@@ -1,7 +1,7 @@
 # Closing cross vs official close, 2019-01-30
 
 Data: NASDAQ's public TotalView-ITCH 5.0 sample file `01302019.NASDAQ_ITCH50`
-(sizes and hashes in `manifest_20190130.md`). Machine: Intel Core Ultra 7
+(sizes and hashes in `data/MANIFEST.md`). Machine: Intel Core Ultra 7
 265H, Windows 11, g++ 16.1.0. Checked on 2026-09-21.
 
 Raw output behind every number on this page:
@@ -11,10 +11,11 @@ Raw output behind every number on this page:
   lines, the order messages after 16:00 and the book when each cross was
   published.
 - `closing_cross_replay_20190130.log`: `lob_replay` (built from commit
-  10e89c7) on the same file, with the ten symbols below named. Source of the
+  eaeb960) on the same file, with the ten symbols below named. Source of the
   replayed books at 16:00:00.000 ET.
 - `official_close_yahoo_20190130.log`: the official closes, fetched from
-  Yahoo Finance, with the request URLs and the split arithmetic.
+  Yahoo Finance by `tools/official_close_yahoo.sh`, with the request URLs
+  and the split arithmetic.
 
 ## 1. Closing cross price vs official close
 

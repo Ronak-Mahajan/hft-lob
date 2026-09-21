@@ -1,0 +1,33 @@
+=== Phase 5: sharded multi-core market engine ===
+hardware threads: 16 | instruments: 128 | messages: 16000000
+
+generating 16000000-message market stream...
+stream: 509.1 MB
+
+[1] Sequential baseline (1 thread, 128 books)
+  2.764 s  ->  5.8 M msgs/s
+  counters: out-of-band drops 0 | bad-length 0
+
+[2] Parallel-vs-sequential differential verification (W=8)
+  128 instruments, full-band depth compare: all identical - PASS
+
+[3] Demux fan-out scaling (1 producer + W workers)
+    W |  M msgs/s |  speedup
+    1 |       6.3 |    1.10x
+    2 |       5.0 |    0.87x
+    4 |      13.2 |    2.28x
+    8 |      32.2 |    5.56x
+   12 |      38.9 |    6.72x
+   15 |      19.4 |    3.36x
+
+[4] Multi-channel scaling (per-shard feeds, no demux - venue-style)
+    W |  M msgs/s |  speedup
+    1 |       6.1 |    1.06x
+    2 |       7.4 |    1.29x
+    4 |      22.0 |    3.80x
+    8 |      49.8 |    8.60x
+   12 |      65.8 |   11.37x
+   15 |      63.0 |   10.88x
+
+done.
+exit 0

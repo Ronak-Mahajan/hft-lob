@@ -138,7 +138,8 @@ $presplit = mc("perf_20190130_run_multicore_presplit.log");
     my ($dg) = $s =~ /book digest chain over [\d,]+ chunk boundaries: ([0-9a-f]+)/;
     my ($mm) = $s =~ /orders compared in queue order [\d,]+ \| mismatches ([\d,]+)/;
     my ($cp) = $s =~ /^  checkpoints ([\d,]+) \| book comparisons/m;
-    $replay = { file => $f, digest => $dg, cd => \@cd, mismatches => n($mm), checkpoints => n($cp), pass => ($s =~ /^RESULT: PASS$/m ? 1 : 0) };
+    my ($rc) = $s =~ /^source: git commit (\S+)/m;
+    $replay = { file => $f, digest => $dg, cd => \@cd, mismatches => n($mm), checkpoints => n($cp), commit => $rc // 'not recorded in the log', pass => ($s =~ /^RESULT: PASS$/m ? 1 : 0) };
 }
 
 # ---- consistency checks: every run reconstructed the same books ------------
@@ -199,7 +200,7 @@ my $json = obj(
         bytes => 11245883092,
         sha256 => '1d0972ffc25b35902ccc3f9069aae517da56903d5795f872902b8697315f30c3',
         messages => $c0->{messages},
-        manifest => 'results/manifest_20190130.md',
+        manifest => 'data/MANIFEST.md',
     ),
     machine => obj(
         cpu => $c0->{cpu},
@@ -216,7 +217,7 @@ my $json = obj(
         flags => $c0->{flags},
         latency_build_flags => $lat[0]{c}{flags},
         git_commit => $commit,
-        binaries => 'lob_perf (src/perf_main.cpp) for throughput and multi-core; lob_perf_latency (the same source with -DLOB_PERF_LATENCY) for per-message latency; lob_replay (src/replay_main.cpp) for the differential run',
+        binaries => 'lob_perf (src/perf_main.cpp) for throughput and multi-core and lob_perf_latency (the same source with -DLOB_PERF_LATENCY) for per-message latency, both built from git_commit; lob_replay (src/replay_main.cpp) for the differential run, built from correctness.differential_commit',
     ),
     tsc => obj(
         invariant => $c0->{invariant},
@@ -227,6 +228,7 @@ my $json = obj(
     correctness => obj(
         note => 'every run below printed a digest of every book\'s full state (levels and queue order) after each of the 42 chunks; all of them equal the digests of the differential run, which compared every book against the reference model',
         differential_log => "results/$replay->{file}",
+        differential_commit => $replay->{commit},
         differential_checkpoints => $replay->{checkpoints},
         differential_mismatches => $replay->{mismatches},
         digest_chain => $replay->{digest},
