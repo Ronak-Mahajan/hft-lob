@@ -90,25 +90,25 @@ Which commit each committed log was built from:
 
 | Logs | Built from |
 |---|---|
-| `replay_20190130_differential.log`, `closing_cross_replay_20190130.log`, `replay_fixture.log`, `replay_selftest.log` | `5b78e5a` (printed in each log; build lines in `replay_run_env.log`) |
-| `synthetic_*.log` | `eaeb960` (build lines in `replay_synthetic_run_env.log`) |
-| `perf_20190130_run_*.log` | `d17968a` (printed in every log; build lines in `perf_20190130_run_env.log`) |
-| `perf_20190130_repro_*.log` | `18d6082` (printed in each log; build lines in `perf_20190130_repro_env.log`) |
-| `perf_20190130_placement_*_throughput.log` | `fec2f8b` (printed in each log; build lines in `perf_20190130_placement_env.log`) |
-| `perf_20190130_placement_*_latency*.log` | `9f9ee75` (printed in each log; build lines in `perf_20190130_placement_latency_env.log`) |
-| `itch_count_20190130.log` | `caa468f` (build line at the top of the log) |
+| `replay_20190130_differential.log`, `closing_cross_replay_20190130.log`, `replay_fixture.log`, `replay_selftest.log` | `d191efd` (printed in each log; build lines in `replay_run_env.log`) |
+| `synthetic_*.log` | `fc9b010` (build lines in `replay_synthetic_run_env.log`) |
+| `perf_20190130_run_*.log` | `380902a` (printed in every log; build lines in `perf_20190130_run_env.log`) |
+| `perf_20190130_repro_*.log` | `1ed03a6` (printed in each log; build lines in `perf_20190130_repro_env.log`) |
+| `perf_20190130_placement_*_throughput.log` | `09da5d0` (printed in each log; build lines in `perf_20190130_placement_env.log`) |
+| `perf_20190130_placement_*_latency*.log` | `62f8be9` (printed in each log; build lines in `perf_20190130_placement_latency_env.log`) |
+| `itch_count_20190130.log` | `2f2082f` (build line at the top of the log) |
 
 At the commit that last updated this manifest: `lob_replay` compiles exactly
-the sources of `5b78e5a`. `lob_bench` differs from `eaeb960` only in the
+the sources of `d191efd`. `lob_bench` differs from `fc9b010` only in the
 reference comparison code of its checks 6 and 7 (`src/book_diff.hpp`,
 `src/replay_run.hpp`), not in the code its benchmarks time. `lob_parallel`
-compiles exactly the sources of `eaeb960`. `lob_perf` differs from `d17968a`
+compiles exactly the sources of `fc9b010`. `lob_perf` differs from `380902a`
 in `clock_of()` in `src/replay_day.hpp`, which formats timestamps in log
 lines, and in the `--placement` option, whose default is the placement of
 every earlier run; its timed loops are unchanged. `lob_perf_latency` also
 measures the empty timer pair throughout the pass and subtracts it when the
-percentiles are read (`9f9ee75`). Both compile exactly the sources of
-`9f9ee75`. `tools/itch_count.cpp` is unchanged since `caa468f`. To build
+percentiles are read (`62f8be9`). Both compile exactly the sources of
+`62f8be9`. `tools/itch_count.cpp` is unchanged since `2f2082f`. To build
 exactly the source a log names, `git checkout` that commit first.
 
 ## Reproducing every file in `results/`
@@ -134,10 +134,10 @@ Run from `data/`, with the decompressed file there:
 | `perf_20190130_run_latency_1.log` .. `_3.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, three times |
 | `perf_20190130_run_multicore_demux.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50 --mode demux --workers 1,2,3,4,5,8,13` |
 | `perf_20190130_run_multicore_presplit.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50 --mode presplit --workers 1,2,3,4,5,8,13` |
-| `perf_20190130_repro_latency.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, built from `18d6082` |
-| `perf_20190130_repro_throughput.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50`, built from `18d6082` |
-| `perf_20190130_placement_prescan_throughput.log`, `perf_20190130_placement_firstadd_throughput.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50`, then the same with `--placement first-add`, built from `fec2f8b` |
-| `perf_20190130_placement_prescan_latency_1.log`, `perf_20190130_placement_firstadd_latency.log`, `perf_20190130_placement_prescan_latency_2.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, the same with `--placement first-add`, then the first again, built from `9f9ee75` |
+| `perf_20190130_repro_latency.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, built from `1ed03a6` |
+| `perf_20190130_repro_throughput.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50`, built from `1ed03a6` |
+| `perf_20190130_placement_prescan_throughput.log`, `perf_20190130_placement_firstadd_throughput.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50`, then the same with `--placement first-add`, built from `09da5d0` |
+| `perf_20190130_placement_prescan_latency_1.log`, `perf_20190130_placement_firstadd_latency.log`, `perf_20190130_placement_prescan_latency_2.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, the same with `--placement first-add`, then the first again, built from `62f8be9` |
 
 No market data needed, from any directory:
 

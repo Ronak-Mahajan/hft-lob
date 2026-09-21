@@ -48,7 +48,7 @@
     "compiler": "g++ 16.1.0",
     "flags": "-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include",
     "latency_build_flags": "-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY",
-    "git_commit": "d17968aa889b4492ddad62285739576a3bfa8dcd",
+    "git_commit": "380902a3597da1ee8133e4db72e3461370b06d18",
     "binaries": "lob_perf (src/perf_main.cpp) for throughput and multi-core and lob_perf_latency (the same source with -DLOB_PERF_LATENCY) for per-message latency, both built from git_commit; lob_replay (src/replay_main.cpp) for the differential run, built from correctness.differential_commit"
   },
   "tsc": {
@@ -106,7 +106,7 @@
   "correctness": {
     "note": "every run below printed a digest of every book's full state (levels and queue order) after each of the 42 chunks; all of them equal the digests of the differential run, which compared every book against the reference model",
     "differential_log": "results/replay_20190130_differential.log",
-    "differential_commit": "5b78e5a29b4570d531f61e207b75775cc5ee948d",
+    "differential_commit": "d191efd0d42adb9f10fdcfa47524371cd5f28866",
     "differential_checkpoints": 76,
     "differential_mismatches": 0,
     "digest_chain": "17b49d11d49913b3",

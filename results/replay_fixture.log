@@ -4,7 +4,7 @@
 === lob_replay: NASDAQ TotalView-ITCH 5.0 day replay with ref::Market differential ===
 run: 2026-09-21 04:15:05 local | cpu: Intel(R) Core(TM) Ultra 7 265H | compiler: g++ 16.1.0
 command: lob_replay --fixture
-source: git commit 5b78e5a29b4570d531f61e207b75775cc5ee948d
+source: git commit d191efd0d42adb9f10fdcfa47524371cd5f28866
 file: lob_replay_fixture.itch
 chunk 2,255 bytes | checkpoint every 1 messages | ladder budget 0 MB
 

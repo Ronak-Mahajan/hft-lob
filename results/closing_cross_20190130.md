@@ -11,7 +11,7 @@ Raw output behind every number on this page:
   lines, the order messages after 16:00 and the book when each cross was
   published.
 - `closing_cross_replay_20190130.log`: `lob_replay` (built from commit
-  5b78e5a) on the same file, with the ten symbols below named. Source of the
+  d191efd) on the same file, with the ten symbols below named. Source of the
   replayed books at 16:00:00.000 ET.
 - `official_close_nasdaq_20190130.log`: the official closes from Nasdaq's
   own historical quotes, fetched by `tools/official_close_nasdaq.sh`, with

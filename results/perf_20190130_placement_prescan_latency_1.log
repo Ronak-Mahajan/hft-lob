@@ -9,7 +9,7 @@ machine
   memory: 31.5 GB total, 9.4 GB available at start
   power: AC line online | battery 100% | battery saver off
   compiler: g++ 16.1.0 | flags: -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY
-  source: git commit 9f9ee75779ec3ecf03922cfed72c813d473b3c36
+  source: git commit 62f8be98712e785d130a1c9e078bb6a79927b668
   cpu order, fastest type first: 0 1 10 11 12 13 2 3 4 5 6 7 8 9 14 15
 tsc
   invariant TSC (CPUID 80000007h EDX bit 8): yes

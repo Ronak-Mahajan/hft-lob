@@ -170,12 +170,12 @@ for all ten.
 the same pre-scan and streams the same file in 256 MB chunks. Every figure
 here: the 265H laptop above, on AC power, Windows 11 on the Balanced power
 plan, with a browser and other everyday applications open; g++ 16.1.0,
-`-O3 -march=native -DNDEBUG`, binaries built from commit `d17968a` unless a
+`-O3 -march=native -DNDEBUG`, binaries built from commit `380902a` unless a
 paragraph names another. Each run pins its thread (logical CPU 1, a P-core,
 unless stated) and raises the process to high priority. The raw console
 output of every run is a `results/perf_20190130_*.log` file, and
 [`results/perf_20190130.json`](results/perf_20190130.json) collects every
-number of the `d17968a` runs, generated from their logs by
+number of the `380902a` runs, generated from their logs by
 `tools/perf_json.pl`.
 
 **Single core, end to end.** Every message is framed, length-checked, routed
@@ -231,8 +231,8 @@ book's work: messages the book skips after one table lookup (the "other"
 row) also reached 171,168 ns. They fit the thread losing its core to the OS
 mid-message, which these runs do not record.
 
-**Rebuilt and rerun.** Built again from commit `18d6082`, whose `lob_perf`
-sources differ from `d17968a` only in how log lines format timestamps, and
+**Rebuilt and rerun.** Built again from commit `1ed03a6`, whose `lob_perf`
+sources differ from `380902a` only in how log lines format timestamps, and
 run on the same laptop the same day: the latency build measured, for all
 messages, p50 182 ns, p90 462, p99 1,058 and p99.9 1,502
 ([`results/perf_20190130_repro_latency.log`](results/perf_20190130_repro_latency.log)),
@@ -242,7 +242,7 @@ both with every chunk's book digest equal to the differential run's.
 
 **Timer cost under a changing clock.** The empty timer pair takes a fixed
 number of core cycles, so its cost in TSC cycles rises when the core clocks
-down. From commit `9f9ee75` the latency build measures the pair before the
+down. From commit `62f8be9` the latency build measures the pair before the
 pass, after each of the 42 chunks and after the pass; within a single run
 its minimum after a chunk ranged from 34 to 82 cycles, or from 38 to 116.
 The build subtracts the smallest minimum seen, so a sample taken while the
@@ -358,7 +358,7 @@ every run.
 no market data. They measure the ladder-only `LimitOrderBook` in isolation,
 on streams whose prices stay inside its band, and they are what CI runs, in
 `--quick` mode, for correctness (see *Tests and CI*). These figures are from
-the same 265H laptop, built from commit `eaeb960` with the `-O3 -march=native
+the same 265H laptop, built from commit `fc9b010` with the `-O3 -march=native
 -DNDEBUG` lines in *Build & run*; the environment before each run is in
 [`results/replay_synthetic_run_env.log`](results/replay_synthetic_run_env.log).
 

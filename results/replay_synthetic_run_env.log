@@ -1,14 +1,14 @@
 Environment for synthetic_lob_bench_run_{1,2,3}.log and synthetic_lob_parallel_run_1.log. The same batch
 also ran the lob_replay runs listed below (differential, closing-cross replay, --fixture, --selftest) from
-eaeb960; the logs of those names in results/ are later runs from 5b78e5a, recorded in replay_run_env.log.
+fc9b010; the logs of those names in results/ are later runs from d191efd, recorded in replay_run_env.log.
 The binaries were built into a scratch directory, shown below as bin/. The two replays ran with
 the directory holding 01302019.NASDAQ_ITCH50 as their working directory; lob_bench, lob_parallel
 and the two built-in replay tests ran from a scratch directory.
---- build (source: git archive of commit eaeb960f0c547dff9548ccea4e147455f7abe9e5 into a clean directory)
+--- build (source: git archive of commit fc9b01001f85542a96d2a57c82d15e4ab16813f9 into a clean directory)
 + g++ --version
 + head -1
 g++.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r4) 16.1.0
-+ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="eaeb960f0c547dff9548ccea4e147455f7abe9e5"' src/replay_main.cpp -o bin/lob_replay.exe
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="fc9b01001f85542a96d2a57c82d15e4ab16813f9"' src/replay_main.cpp -o bin/lob_replay.exe
 + g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include src/main.cpp -o bin/lob_bench.exe
 + g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include src/parallel_main.cpp -o bin/lob_parallel.exe
 + set +x
