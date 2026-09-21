@@ -23,9 +23,11 @@
 //   --mode latency   per-message latency. Only in the lob_perf_latency
 //                    build (-DLOB_PERF_LATENCY): every message is timed alone
 //                    with rdtsc_begin()/rdtsc_end() (lfence; rdtsc ... rdtscp;
-//                    lfence), the minimum cost of an empty timer pair is
-//                    subtracted, and the cycles go into an exact histogram
-//                    per message type.
+//                    lfence), the raw cycles go into an exact histogram per
+//                    message type, and the minimum cost of an empty timer
+//                    pair (the smallest of the calibrations taken before
+//                    the pass, after every chunk and after the pass) is
+//                    subtracted when the percentiles are read.
 //
 // After every chunk (untimed) the tool prints books_digest(), a digest of the
 // full state of every book; lob_replay --differential prints the same
@@ -36,10 +38,15 @@
 // (std::chrono::steady_clock elsewhere) in five 1 s windows before the pass,
 // and over the whole timed pass.
 //
+// --placement first-add places every ladder without looking ahead in the file
+// (see place_at_first_add()); the default, prescan, is lob_replay's sizing.
+//
 // Usage:
 //   lob_perf FILE [--mode single|demux|presplit] [--cpu N] [--cpus a,b,...]
 //                 [--workers 1,2,4] [--chunk-mb N] [--ladder-mb N]
+//                 [--placement prescan|first-add]
 //   lob_perf_latency FILE [--cpu N] [--chunk-mb N] [--ladder-mb N]
+//                         [--placement prescan|first-add]
 // ---------------------------------------------------------------------------
 #if defined(_WIN32) && !defined(_WIN32_WINNT)
   #define _WIN32_WINNT 0x0A00             // Windows 10: GetSystemCpuSetInformation
@@ -238,6 +245,7 @@ struct Options {
     std::vector<unsigned> workers = {1, 2, 4};
     size_t chunk = size_t{256} << 20;
     uint64_t ladder_mb = 1024;
+    bool first_add = false;             // --placement first-add (see place_at_first_add)
 };
 
 struct Day {
@@ -246,14 +254,76 @@ struct Day {
     uint64_t adds = 0, predicted_ladder_adds = 0, n_books = 0;
 };
 
+// --placement first-add: ladders placed without looking ahead. size_books()
+// places each ladder on the window of prices where that symbol's adds arrived
+// during the day and sizes its width from the day's price spread, which a live
+// feed handler cannot know in advance. This placement uses only what is known
+// when a symbol's first add arrives: every book gets the same width, the
+// largest power of two whose ladders fit the budget across all books; the
+// grid is one cent if the first add is at or above $1.00 and $0.0001 below;
+// and the ladder is centered on the first add. Pool and id-map capacities
+// still come from the pre-scan (they size memory, not where a price rests),
+// and the adds the ladders cover are counted again for this placement, so the
+// run still checks its overflow count against a prediction.
+struct FirstAdd {
+    bool     has_book = false;
+    uint32_t base = 0, tick = 100, band = 64;
+    uint64_t covered = 0;               // the day's adds on this ladder
+};
+
+std::vector<FirstAdd> place_at_first_add(const DayScan& d, uint64_t budget_bytes, uint32_t& band_out) {
+    uint64_t n_books = 0;
+    for (const SymbolScan& s : d.sym) if (s.order_msgs) ++n_books;
+    uint32_t band = 64;
+    while (band < (64u << kMaxK) &&
+           static_cast<double>(n_books) * (2.0 * band) * kBytesPerTick <= static_cast<double>(budget_bytes))
+        band *= 2;
+    band_out = band;
+    std::vector<FirstAdd> f(65536);
+    for (int loc = 0; loc < 65536; ++loc) {
+        const SymbolScan& s = d.sym[loc];
+        if (!s.order_msgs) continue;
+        FirstAdd& a = f[loc];
+        a.has_book = true;
+        a.band = band;
+        if (s.prices.empty()) continue;                  // no adds: any placement will do
+        const uint32_t first = s.prices.front();         // the pre-scan keeps adds in file order
+        a.tick = first < 10000 ? 1 : 100;
+        uint64_t start = first / a.tick;
+        start = start >= band / 2 ? start - band / 2 : 0;
+        const uint64_t max_start = ((uint64_t{1} << 32) - uint64_t{band} * a.tick) / a.tick;
+        if (start > max_start) start = max_start;
+        a.base = static_cast<uint32_t>(start * a.tick);
+        for (uint32_t px : s.prices)
+            if (px % a.tick == 0 && px / a.tick >= start && px / a.tick < start + band) ++a.covered;
+    }
+    return f;
+}
+
 void setup(const Options& o, Day& day) {
     const auto s0 = clk::now();
     prescan(o.path.c_str(), o.chunk, day.scan);
     const double scan_s = std::chrono::duration<double>(clk::now() - s0).count();
     const DayScan& d = day.scan;
     for (const SymbolScan& s : d.sym) day.adds += s.adds;
+    std::vector<FirstAdd> fa;
+    uint32_t fa_band = 0;
+    if (o.first_add) fa = place_at_first_add(d, o.ladder_mb * 1'000'000ull, fa_band);   // before size_books sorts the prices
     double ladder_mb = 0;
     day.z = size_books(day.scan, o.ladder_mb * 1'000'000ull, ladder_mb);
+    if (o.first_add) {
+        uint64_t n = 0;
+        for (int loc = 0; loc < 65536; ++loc) {
+            if (!fa[loc].has_book) continue;
+            Sizing& q = day.z[loc];
+            q.base = fa[loc].base;
+            q.tick = fa[loc].tick;
+            q.band = fa[loc].band;
+            q.ladder_adds = fa[loc].covered;
+            ++n;
+        }
+        ladder_mb = static_cast<double>(n) * fa_band * kBytesPerTick / 1e6;
+    }
     uint64_t pool_slots = 0, idmap_slots = 0;
     for (const Sizing& q : day.z) {
         if (!q.has_book) continue;
@@ -262,8 +332,16 @@ void setup(const Options& o, Day& day) {
         pool_slots += q.pool;
         idmap_slots += uint64_t{1} << q.idmap_log2;
     }
-    std::printf("pre-scan and sizing (untimed, %.1f s; the same as lob_replay's)\n",
-                std::chrono::duration<double>(clk::now() - s0).count());
+    if (!o.first_add)
+        std::printf("pre-scan and sizing (untimed, %.1f s; the same as lob_replay's)\n",
+                    std::chrono::duration<double>(clk::now() - s0).count());
+    else
+        std::printf("pre-scan and sizing (untimed, %.1f s; ladders placed at each symbol's first add, "
+                    "not lob_replay's placement)\n"
+                    "  placement first-add: every ladder %s ticks, centered on the symbol's first add price, "
+                    "grid $0.01 if that price is at least $1.00 and $0.0001 below; pool and id-map "
+                    "capacities from the pre-scan\n",
+                    std::chrono::duration<double>(clk::now() - s0).count(), num(fa_band).c_str());
     std::printf("  file %s | chunk %s bytes | ladder budget %s MB\n", o.path.c_str(), num(o.chunk).c_str(),
                 num(o.ladder_mb).c_str());
     std::printf("  bytes %s | messages %s | trailing bytes %s | bad_length %s | pre-scan %.1f s\n",
@@ -607,11 +685,24 @@ struct Hist {
         for (uint32_t i = kHistMax; i-- > 0;) if (bucket[i]) return i;
         return 0;
     }
+    // Mean of max(sample - ovh, 0), and the number of samples <= ovh.
+    long double mean_minus(uint64_t ovh) const {
+        long double s = 0;
+        for (uint32_t i = 0; i < kHistMax; ++i) if (i > ovh) s += static_cast<long double>(bucket[i]) * (i - ovh);
+        for (uint64_t v : big) if (v > ovh) s += v - ovh;
+        return n ? s / n : 0;
+    }
+    uint64_t at_most(uint64_t ovh) const {
+        uint64_t c = 0;
+        for (uint32_t i = 0; i < kHistMax && i <= ovh; ++i) c += bucket[i];
+        for (uint64_t v : big) if (v <= ovh) ++c;
+        return c;
+    }
 };
 
-uint64_t timer_overhead(std::vector<uint64_t>& samples) {
+uint64_t timer_overhead(std::vector<uint64_t>& samples, int pairs = 100'000) {
     uint64_t best = ~0ull;
-    for (int i = 0; i < 100'000; ++i) {
+    for (int i = 0; i < pairs; ++i) {
         uint64_t t0 = rdtsc_begin();
         uint64_t t1 = rdtsc_end();
         samples.push_back(t1 - t0);
@@ -619,6 +710,20 @@ uint64_t timer_overhead(std::vector<uint64_t>& samples) {
     }
     std::sort(samples.begin(), samples.end());
     return best;
+}
+
+// The TSC ticks at a fixed rate while the core's clock follows the power
+// plan, so an empty timer pair costs about twice as many TSC cycles while the
+// core runs at half its clock, and on this laptop that state comes and goes
+// during a pass. So the pair is measured before the pass (after 0.5 s of
+// busy spinning on the pinned core), after every chunk (10,000 pairs,
+// outside the timed region) and after the pass, the histograms hold raw
+// cycles, and the smallest minimum seen is subtracted from every sample: that
+// can leave part of the overhead in a sample taken while the core was slow,
+// never subtract more than the fastest state's overhead.
+void busy_spin(double seconds) {
+    const auto t0 = clk::now();
+    while (std::chrono::duration<double>(clk::now() - t0).count() < seconds) { /* spin */ }
 }
 
 int run_latency(const Options& o, const Day& day, unsigned cpu) {
@@ -634,22 +739,26 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
     const char types[] = "AFECXDU";
     for (int s = 0; s < 7; ++s) slot_of[static_cast<uint8_t>(types[s])] = static_cast<uint8_t>(s);
 
-    std::vector<uint64_t> ovh_samples;
-    const uint64_t ovh = timer_overhead(ovh_samples);
+    std::vector<uint64_t> pre_samples;
+    busy_spin(0.5);
+    const uint64_t pre = timer_overhead(pre_samples);
     std::printf("per-message latency | thread %s cpu %u | every message timed\n",
                 pinned ? "pinned to" : "NOT pinned, asked for", cpu);
     std::printf("  timed region per message: the book lookup by stock_locate and "
                 "itch::dispatch_checked<WireUnits>(), between rdtsc_begin() (lfence; rdtsc) and "
                 "rdtsc_end() (rdtscp; lfence)\n");
     std::printf("  empty timer pair, 100,000 samples: min %" PRIu64 " | p50 %" PRIu64 " | p99 %" PRIu64
-                " cycles; the min (%" PRIu64 ") is subtracted from every sample, clamped at 0\n",
-                ovh, ovh_samples[ovh_samples.size() / 2], ovh_samples[ovh_samples.size() * 99 / 100], ovh);
+                " cycles (before the pass, after 0.5 s of busy spinning; measured again after every "
+                "chunk and after the pass)\n",
+                pre, pre_samples[pre_samples.size() / 2], pre_samples[pre_samples.size() * 99 / 100]);
     std::fflush(stdout);
 
     std::vector<Hist> hist(kSlots);
     ChunkReader rd(o.path.c_str(), o.chunk);
     EndState e;
-    uint64_t zero = 0;
+    std::vector<uint64_t> chunk_min;                       // empty-pair minimum after each chunk
+    std::vector<uint64_t> cal;
+    cal.reserve(10'000);
     const uint8_t* consumed = nullptr;
     const Stamp s0 = stamp();
     while (rd.next(consumed)) {
@@ -669,9 +778,7 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
                 ++e.bad_length;
             }
             const uint64_t c1 = rdtsc_end();
-            const uint64_t c = c1 - c0 > ovh ? c1 - c0 - ovh : 0;
-            zero += c == 0;
-            hist[slot_of[len ? m[0] : 0]].add(c);
+            hist[slot_of[len ? m[0] : 0]].add(c1 - c0);  // raw; the overhead is subtracted at the end
             p = m + len;
             ++e.messages;
         }
@@ -680,12 +787,20 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
         e.chain.add(dg);
         chunk_line(++e.chunks, e.messages - n0, e.messages,
                    std::chrono::duration<double>(t1 - t0).count(), dg);
+        cal.clear();
+        chunk_min.push_back(timer_overhead(cal, 10'000));
         consumed = p;
     }
     const Stamp s1 = stamp();
     e.trailing = rd.trailing();
     tally_books(books.data(), e);
     const double ghz = ghz_between(s0, s1);
+    std::vector<uint64_t> post_samples;
+    const uint64_t post = timer_overhead(post_samples);
+    uint64_t ovh = std::min(pre, post);
+    for (uint64_t c : chunk_min) ovh = std::min(ovh, c);
+    std::vector<uint64_t> cm_sorted = chunk_min;
+    std::sort(cm_sorted.begin(), cm_sorted.end());
 
     Hist order, all;
     for (int s = 0; s < 7; ++s) order.merge(hist[s]);
@@ -698,12 +813,27 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
                 "not throughput)\n", cpu);
     std::printf("  TSC over the whole pass (%.1f s): %.6f GHz; ns = cycles / %.6f\n",
                 std::chrono::duration<double>(s1.t - s0.t).count(), ghz, ghz);
-    std::printf("  samples clamped to 0 after overhead subtraction: %s\n", num(zero).c_str());
+    std::printf("  empty timer pair after each chunk, 10,000 samples each, min cycles:");
+    for (size_t i = 0; i < chunk_min.size(); ++i)
+        std::printf("%s %" PRIu64, i % 21 == 0 ? "\n   " : "", chunk_min[i]);
+    std::printf("\n  empty timer pair after the pass, 100,000 samples: min %" PRIu64 " | p50 %" PRIu64
+                " | p99 %" PRIu64 " cycles\n",
+                post, post_samples[post_samples.size() / 2], post_samples[post_samples.size() * 99 / 100]);
+    std::printf("  subtracted from every sample, clamped at 0: %" PRIu64 " cycles, the smallest minimum seen "
+                "(before the pass %" PRIu64 ", after the chunks %" PRIu64 " to %" PRIu64 ", after the pass %" PRIu64
+                ")\n",
+                ovh, pre, cm_sorted.empty() ? 0 : cm_sorted.front(), cm_sorted.empty() ? 0 : cm_sorted.back(),
+                post);
+    std::printf("  samples clamped to 0 after overhead subtraction: %s\n", num(all.at_most(ovh)).c_str());
     std::printf("  percentiles are nearest-rank over every sample\n");
     auto row = [&](const char* name, const Hist& h, bool ns) {
-        auto f = [&](uint64_t c) { return ns ? static_cast<double>(c) / ghz : static_cast<double>(c); };
+        auto f = [&](uint64_t raw) {
+            const uint64_t c = raw > ovh ? raw - ovh : 0;
+            return ns ? static_cast<double>(c) / ghz : static_cast<double>(c);
+        };
+        const double mean = static_cast<double>(h.mean_minus(ovh));
         std::printf("  %-6s %12s | %8.1f | %7.0f | %7.0f | %7.0f | %7.0f | %8.0f | %8.0f | %10.0f\n", name,
-                    num(h.n).c_str(), ns ? static_cast<double>(h.sum / h.n) / ghz : static_cast<double>(h.sum / h.n),
+                    num(h.n).c_str(), ns ? mean / ghz : mean,
                     f(h.min()), f(h.quantile(0.50)), f(h.quantile(0.90)), f(h.quantile(0.99)),
                     f(h.quantile(0.999)), f(h.quantile(0.9999)), f(h.max()));
     };
@@ -745,10 +875,16 @@ int main(int argc, char** argv) {
         else if (a == "--workers") o.workers = parse_list(val());
         else if (a == "--chunk-mb") o.chunk = size_t{std::max<uint64_t>(1, std::strtoull(val().c_str(), nullptr, 10))} << 20;
         else if (a == "--ladder-mb") o.ladder_mb = std::strtoull(val().c_str(), nullptr, 10);
+        else if (a == "--placement") {
+            const std::string p = val();
+            if (p != "prescan" && p != "first-add") { std::printf("--placement: prescan or first-add\n"); return 2; }
+            o.first_add = p == "first-add";
+        }
         else if (!a.empty() && a[0] != '-' && o.path.empty()) o.path = a;
         else {
             std::printf("usage: %s FILE [--mode single|demux|presplit|latency] [--cpu N] [--cpus a,b,...] "
-                        "[--workers 1,2,4] [--chunk-mb N] [--ladder-mb N]\n", argv[0]);
+                        "[--workers 1,2,4] [--chunk-mb N] [--ladder-mb N] [--placement prescan|first-add]\n",
+                        argv[0]);
             return 2;
         }
     }

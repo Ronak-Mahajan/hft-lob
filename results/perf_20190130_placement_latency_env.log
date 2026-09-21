@@ -1,0 +1,60 @@
+Environment for perf_20190130_placement_prescan_latency_1.log, perf_20190130_placement_firstadd_latency.log and
+perf_20190130_placement_prescan_latency_2.log (the latency_prescan_1, latency_firstadd and latency_prescan_2 runs
+below, in that order). The build also produced lob_perf.exe, which this batch did not run. The binaries were built
+into a scratch directory, shown below as bin/; the runs used the directory holding 01302019.NASDAQ_ITCH50 as their
+working directory.
+--- build (source: git archive of commit 9f9ee75779ec3ecf03922cfed72c813d473b3c36 into a clean directory)
++ g++ --version
++ head -1
+g++.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r4) 16.1.0
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="9f9ee75779ec3ecf03922cfed72c813d473b3c36"' '-DLOB_BUILD_FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include"' src/perf_main.cpp -o bin/lob_perf.exe
++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY '-DLOB_GIT_COMMIT="9f9ee75779ec3ecf03922cfed72c813d473b3c36"' '-DLOB_BUILD_FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY"' src/perf_main.cpp -o bin/lob_perf_latency.exe
++ set +x
+--- run order (local time)
+Mon Sep 21 05:18:36 CDT 2026 start latency_prescan_1: bin/lob_perf_latency.exe 01302019.NASDAQ_ITCH50
+Mon Sep 21 05:22:11 CDT 2026 end latency_prescan_1
+Mon Sep 21 05:22:18 CDT 2026 start latency_firstadd: bin/lob_perf_latency.exe 01302019.NASDAQ_ITCH50 --placement first-add
+Mon Sep 21 05:26:45 CDT 2026 end latency_firstadd
+Mon Sep 21 05:26:52 CDT 2026 start latency_prescan_2: bin/lob_perf_latency.exe 01302019.NASDAQ_ITCH50
+Mon Sep 21 05:30:23 CDT 2026 end latency_prescan_2
+--- before each run: power line status, power plan, and the processes that used the most CPU in the 5 s before it
+=== latency_prescan_1 2026-09-21 05:18:29
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+claude         0.28
+nvsphelper64   0.16
+chrome         0.12
+explorer       0.09
+claude         0.06
+powershell     0.06
+
+
+
+=== latency_firstadd 2026-09-21 05:22:11
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome       0.64
+kass         0.31
+explorer     0.09
+powershell   0.08
+claude       0.08
+claude       0.05
+
+
+
+=== latency_prescan_2 2026-09-21 05:26:45
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)top processes by CPU seconds in the last 5 s:
+
+chrome                0.98
+kass                  0.56
+claude                0.11
+PhoneExperienceHost   0.08
+powershell            0.08
+nvsphelper64          0.05
+
+
+
+ALL DONE
