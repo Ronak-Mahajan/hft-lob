@@ -1,9 +1,10 @@
 # hft-lob: NASDAQ ITCH 5.0 limit order book (C++20)
 
 Level 2 order book reconstruction for NASDAQ TotalView-ITCH 5.0. Add, cancel,
-execute and replace are O(1) on a flat per-symbol price ladder, with no
-allocation and no locks on that path. A price the ladder does not hold rests,
-exactly, in a per-side overflow, so no order is ever dropped or rounded.
+execute and replace are O(1) on a flat per-symbol price ladder (when the best
+level empties, a bitmap scan finds the next one), with no allocation and no
+locks on that path. A price the ladder does not hold rests, exactly, in a
+per-side overflow, so no order is ever dropped or rounded.
 
 ## Result: NASDAQ's full trading day of 2019-01-30
 
@@ -18,34 +19,43 @@ orders.
   priced outside $0.01-$1,310.72 (AMZN and BKNG trade above that range) are
   held exactly.
 - **Zero mismatches against a reference.** A deliberately naive reference
-  model that shares no code with the book processed the same messages. At
-  all 76 checkpoints of the day every book was compared with it in full:
-  660,820 book comparisons covering 49,562,417 price levels and 119,295,162
-  queued orders, order by order. Mismatches: **0**.
-- **The closing crosses match the official closes.** For **10 of 10**
+  model that shares no code with the book processed the same messages, one
+  at a time. After every one of the 363,118,215 order messages, the book's
+  resting-order count and BBO, the orders the message named and the price
+  levels it touched were compared with the model; at all 76 checkpoints of
+  the day every book was compared with it in full: 660,820 book comparisons
+  covering 49,562,417 price levels and 119,295,162 queued orders, order by
+  order. Mismatches: **0** in both.
+- **The file's closing crosses match the official closes.** For **10 of 10**
   symbols checked (AAPL, MSFT, AMZN, GOOGL, FB, INTC, CSCO, NVDA, TSLA,
   NFLX), the closing cross price in the file equals the official closing
-  price to the cent. An independent decoder that shares no code with the book
-  counts the same messages by type and prints the same books for those ten
-  symbols at 16:00 ET.
+  price to the cent, as served by Nasdaq and, separately, by Yahoo Finance.
+  An independent decoder that shares no code with the book counts the same
+  messages by type and prints the same books for those ten symbols at 16:00
+  ET.
 - **Per-message latency over the whole day.** Every one of the 368,366,634
-  messages timed on its own, on one P-core: **p50 183 ns, p90 469 ns, p99
+  messages timed on its own (the book lookup, decode and book update, on a
+  file already in memory), on one P-core: **p50 183 ns, p90 469 ns, p99
   1,082 ns, p99.9 1,516 ns**.
 - **Throughput over the whole day.** **8.91M messages/second** on one P-core
   (median of five runs, 112.22 ns/message; range 8.85-9.06M), **52.54M**
   through one demux thread feeding five workers, and **99.80M** aggregate
-  with the input pre-split across 13 workers.
+  with the input pre-split across 13 workers. File reads are outside the
+  timed loops.
 
 Machine: Intel Core Ultra 7 265H laptop (6 P-cores, 8 E-cores, 2 low-power
 E-cores, no SMT), Windows 11, on AC power; g++ 16.1.0, `-O3 -march=native`.
-Not measured: memory use, the core clock during the runs, and any other
-machine or OS. The multi-core configurations ran once each.
+One recorded day. Every book's capacity, and where its price ladder sits,
+comes from a pre-scan of the same file (see *Recorded-day replay*), which a
+live feed handler cannot do: it would size from the previous day. Not
+measured: memory use, the core clock during the runs, file-read time, and
+any other machine or OS. The multi-core configurations ran once each.
 
 | Figures | Committed console output |
 |---|---|
 | replay, drops, reference comparison | [`results/replay_20190130_differential.log`](results/replay_20190130_differential.log) |
-| closing crosses vs official closes | [`results/closing_cross_20190130.md`](results/closing_cross_20190130.md), from [`itch_count_20190130.log`](results/itch_count_20190130.log), [`closing_cross_replay_20190130.log`](results/closing_cross_replay_20190130.log) and [`official_close_yahoo_20190130.log`](results/official_close_yahoo_20190130.log) |
-| per-message latency | [`results/perf_20190130_run_latency_1.log`](results/perf_20190130_run_latency_1.log) (runs 2 and 3 alongside) |
+| closing crosses vs official closes | [`results/closing_cross_20190130.md`](results/closing_cross_20190130.md), from [`itch_count_20190130.log`](results/itch_count_20190130.log), [`closing_cross_replay_20190130.log`](results/closing_cross_replay_20190130.log), [`official_close_nasdaq_20190130.log`](results/official_close_nasdaq_20190130.log) and [`official_close_yahoo_20190130.log`](results/official_close_yahoo_20190130.log) |
+| per-message latency | [`results/perf_20190130_run_latency_1.log`](results/perf_20190130_run_latency_1.log) (runs 2 and 3 alongside, and a rebuilt rerun in [`perf_20190130_repro_latency.log`](results/perf_20190130_repro_latency.log)) |
 | throughput | `results/perf_20190130_run_throughput_{1..5}.log`, `results/perf_20190130_run_multicore_{demux,presplit}.log`, all collected in [`results/perf_20190130.json`](results/perf_20190130.json) |
 | the input file, and the command behind every result | [`data/MANIFEST.md`](data/MANIFEST.md) |
 
@@ -76,11 +86,20 @@ The reference (`src/ref_market.hpp`) decodes every message from the
 specification's byte offsets rather than the packed structs, keeps exact
 prices as `std::map` keys with no ladder or tick, holds every order of the
 market in one `std::unordered_map`, and keeps each level's queue as a
-`std::list`. With `--differential` it processes the same messages, and at
-every checkpoint every book is compared with it in full (`src/book_diff.hpp`):
-both sides level by level (price, aggregate shares, order count), every queue
+`std::list`. With `--differential` the books and the reference take the file
+one message at a time, and two comparisons run (`src/book_diff.hpp`). After
+every order message, what it touched: the book's resting-order count and
+BBO; the order it names (both orders of a replace), resting in both or in
+neither with the same shares, price and side; that an order just added is
+last in its level's queue in both; and the aggregate shares and order count
+at every price it changed. At every checkpoint, every book in full: both
+sides level by level (price, aggregate shares, order count), every queue
 order by order (reference number, remaining shares), the BBO and the
-resting-order count.
+resting-order count. The feed also checks the replay on its own terms: every
+one of the day's executions, cancels, deletes and replaces named a resting
+order (0 unknown order ids, in the books and in the model), none took more
+shares than rested (the model counts that), and the day ends with 0 resting
+orders in both.
 
 From [`results/replay_20190130_differential.log`](results/replay_20190130_differential.log):
 
@@ -93,9 +112,12 @@ From [`results/replay_20190130_differential.log`](results/replay_20190130_differ
 | stock_locates in the directory / with order messages | 8,713 / 8,695 |
 | bad-length messages, orders dropped, unknown order ids | 0 / 0 / 0 |
 | adds on a ladder / in the overflow | 191,722,488 / 196,611 |
+| order messages checked right after they were applied | 363,118,215 |
+| orders / price levels compared in those checks | 390,340,961 / 390,340,961 |
+| **mismatches after a message** | **0** |
 | checkpoints (every 5M messages, 12:00 and 16:00 ET, end of file) | 76 |
-| price levels / queued orders compared | 49,562,417 / 119,295,162 |
-| **mismatches** | **0** |
+| price levels / queued orders compared at the checkpoints | 49,562,417 / 119,295,162 |
+| **mismatches at a checkpoint** | **0** |
 | resting orders at end of file | 0 |
 
 The log also prints the books of AAPL, MSFT, AMZN, BKNG and WFT (a sub-dollar
@@ -106,7 +128,7 @@ every book (each level's price, shares and order count, and each queue order
 by order; `books_digest()` in `src/replay_day.hpp`); the performance runs
 below print the same digests, which is how they are tied to this run. The
 dispatch time a differential run prints is not a measurement: the reference
-runs between the timed segments and evicts the books from cache.
+runs between messages and evicts the books from cache.
 
 `tools/itch_count.cpp` is a second, independent decoder: it includes nothing
 from `include/lob` or `src` and decodes every field by byte offset. Its
@@ -119,20 +141,25 @@ message boundary.
 From [`results/closing_cross_20190130.md`](results/closing_cross_20190130.md).
 For a NASDAQ-listed stock the closing cross price is the NASDAQ Official
 Closing Price. The file's closing cross ('Q' message, cross type 'C') is
-compared with the official close from Yahoo Finance's daily bars, with
-Yahoo's later split adjustments undone
-([`tools/official_close_yahoo.sh`](tools/official_close_yahoo.sh)):
+compared with the official close from two sources fetched separately,
+Nasdaq's own historical quotes and Yahoo Finance's daily bars, with their
+later split adjustments undone
+([`tools/official_close_nasdaq.sh`](tools/official_close_nasdaq.sh),
+[`tools/official_close_yahoo.sh`](tools/official_close_yahoo.sh)). The two
+sources agree with each other for all ten:
 
 | | AAPL | MSFT | AMZN | GOOGL | FB | INTC | CSCO | NVDA | TSLA | NFLX |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | closing cross in the file | 165.25 | 106.38 | 1670.43 | 1097.99 | 150.42 | 47.54 | 46.71 | 137.39 | 308.77 | 340.66 |
 | official close | 165.25 | 106.38 | 1670.43 | 1097.99 | 150.42 | 47.54 | 46.71 | 137.39 | 308.77 | 340.66 |
 
-All ten are equal to the cent. At 16:00:00.000 ET `lob_replay` and the
-independent decoder print identical books for all ten (resting orders, level
-counts, and the top five levels with shares and order counts). At the moment
-each closing cross is published, the independent decoder's book has
-bid <= cross price <= ask for all ten.
+All ten are equal to the cent. The cross prices are data in the file, so
+this checks the input; the reconstruction is checked against the reference
+model above. At 16:00:00.000 ET `lob_replay` and the independent decoder
+print identical books for all ten (resting orders, level counts, and the top
+five levels with shares and order counts). At the moment each closing cross
+is published, the independent decoder's book has bid <= cross price <= ask
+for all ten.
 
 ## Recorded-day performance
 
@@ -185,16 +212,28 @@ in nanoseconds:
 | `D` delete | 158,273,361 | 177 | 591 | 1,227 | 1,601 | 2,930,690 |
 | `U` replace | 27,222,746 | 224 | 564 | 1,087 | 1,546 | 2,428,755 |
 | other (not applied) | 5,248,419 | 7 | 26 | 42 | 139 | 171,168 |
+| order messages (`A` to `U`) | 363,118,215 | 184 | 472 | 1,086 | 1,519 | 3,444,762 |
 | **all messages** | **368,366,634** | **183** | **469** | **1,082** | **1,516** | 3,444,762 |
 
-Run 3 agrees within 1% (all messages: p50 181, p99 1,072, p99.9 1,508). In
-run 2 the empty-timer calibration read 76 cycles instead of 38, which
+Run 3 gives, for all messages, p50 181, p99 1,072 and p99.9 1,508. In run 2
+the empty-timer calibration read 76 cycles instead of 38, which
 over-subtracts every sample; its log is committed and its p99 (1,073) and
 p99.9 (1,512) agree, but it is not used for the headline. Each sample is one
 message timed in isolation behind a serializing fence, so the mean (231 ns)
 is higher than the 112.22 ns/message of the median throughput run, where
-consecutive messages overlap. The maxima, in the milliseconds, are the thread
-being interrupted or preempted by the OS during that message.
+consecutive messages overlap. The maxima, in the milliseconds, are not the
+book's work: messages the book skips after one table lookup (the "other"
+row) also reached 171,168 ns. They fit the thread losing its core to the OS
+mid-message, which these runs do not record.
+
+**Rebuilt and rerun.** Built again from commit `18d6082`, whose `lob_perf`
+sources differ from `d17968a` only in how log lines format timestamps, and
+run on the same laptop the same day: the latency build measured, for all
+messages, p50 182 ns, p90 462, p99 1,058 and p99.9 1,502
+([`results/perf_20190130_repro_latency.log`](results/perf_20190130_repro_latency.log)),
+and the throughput build 8.87M messages/second
+([`results/perf_20190130_repro_throughput.log`](results/perf_20190130_repro_throughput.log)),
+both with every chunk's book digest equal to the differential run's.
 
 **Multi-core.** The books are sharded by `stock_locate % W`, as in
 `engine.hpp`. *Demux*: one thread reads each chunk and routes every message
@@ -213,8 +252,13 @@ messages/second, from `results/perf_20190130_run_multicore_demux.log` and
 | demux | 8.71 | 18.68 | 30.19 | 40.16 | **52.54** | 43.15 | 36.92 |
 | presplit | 8.81 | 19.14 | 31.26 | 42.14 | 58.64 | 64.76 | **99.80** |
 
-Beyond five workers the demux configurations add E-cores and get slower; the
-busiest of 13 shards carries 1.24 times the mean load.
+Up to five workers, all on P-cores, the aggregate grows faster than the
+worker count: at W = 5 the demux reaches 52.54M against 8.71M with one
+worker, and the presplit 58.64M against 8.81M. Each worker then holds a
+fifth of the books, and each P-core has its own L2; that is a likely cause,
+not a measured one (no hardware counters were read). Beyond five workers the
+demux configurations add E-cores and get slower; the busiest of 13 shards
+carries 1.24 times the mean load.
 
 **Same books in every run.** Each of the runs above (throughput, latency,
 both multi-core modes at every W) printed the book digest after each of the
@@ -402,11 +446,12 @@ src/replay_day.hpp          shared by the recorded-day tools: chunked reader,
 src/replay_fixture.hpp      the crafted 65-message file and its expected books
 src/perf_main.cpp           lob_perf: single core, demux, presplit, latency build
 src/ref_market.hpp          naive whole-market reference model (own decoder)
-src/book_diff.hpp           full book comparison: levels, queues, BBO
+src/book_diff.hpp           full book comparison (levels, queues, BBO) and the
+                            per-message check of what a message touched
 src/wire_gen.hpp            generated multi-symbol wire-unit ITCH stream (tests)
 tools/itch_count.cpp        independent recount of a BinaryFILE (no shared code)
 tools/perf_json.pl          builds results/perf_20190130.json from the logs
-tools/*.sh                  data manifest, official closes
+tools/*.sh                  data manifest, official closes (Nasdaq, Yahoo Finance)
 data/MANIFEST.md            the input file: source, sizes, hashes, commands
 results/                    console output of every run cited in this README
 ```
@@ -458,7 +503,8 @@ and `--cpu N` (pin to logical CPU N on Windows; default 2, which on the 265H
 is an E-core). `lob_parallel` takes `--quick`.
 
 `lob_replay FILE` takes the decompressed BinaryFILE. Options:
-`--differential` (run the reference and compare at every checkpoint),
+`--differential` (run the reference alongside: compare what every order
+message touched, and every book in full at every checkpoint),
 `--checkpoint N` (default 5,000,000 messages), `--at HH:MM:SS,...` (extra
 checkpoints that also print the named books; default 12:00:00,16:00:00 ET),
 `--symbols A,B,...`, `--depth N`, `--chunk-mb N` (default 256),
@@ -499,7 +545,8 @@ and is not redistributed here.
 - The book does not match crossing orders; it is a *reconstructor*, and
   crossings are resolved by the venue and arrive as Execute messages, per ITCH
   semantics.
-- The latency maxima (milliseconds in the recorded-day runs) are OS
-  preemption rather than book work; the p99.9 sits three orders of magnitude
-  below them. On a tuned host you would pin to an isolated core (`isolcpus`),
-  keep SMT off on that core, and use huge pages for the slab and the id map.
+- The latency maxima (milliseconds in the recorded-day runs) are not book
+  work (see *Recorded-day performance*); the p99.9 sits three orders of
+  magnitude below them. On a tuned host you would pin to an isolated core
+  (`isolcpus`), keep SMT off on that core, and use huge pages for the slab
+  and the id map.
