@@ -584,7 +584,10 @@ and is not redistributed here.
   the overflow.
 - `lob_replay` sizes its books from a pre-scan of the same file, which suits
   a historical replay. A live feed handler would size from the previous day
-  or a reserve, since it cannot read the day ahead.
+  or a reserve, since it cannot read the day ahead. How much the placement
+  matters is measured in *Recorded-day performance*: with each ladder at its
+  symbol's first add, fewer than half the day's adds land on a ladder and
+  the single-core rate falls from 9.02M to 4.04M messages/second.
 - The book does not match crossing orders; it is a *reconstructor*, and
   crossings are resolved by the venue and arrive as Execute messages, per ITCH
   semantics.
