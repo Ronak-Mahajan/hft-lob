@@ -766,7 +766,11 @@ int main(int argc, char** argv) {
     char when[64];
     std::strftime(when, sizeof when, "%Y-%m-%d %H:%M:%S", std::localtime(&now));
     std::string cmd;
-    for (int i = 0; i < argc; ++i) cmd += (i ? " " : "") + std::string(argv[i]);
+    for (int i = 0; i < argc; ++i) {
+        std::string a = argv[i];
+        if (i == 0) a = a.substr(a.find_last_of("/\\") + 1);   // program name without its directory
+        cmd += (i ? " " : "") + a;
+    }
     std::printf("=== lob_perf: NASDAQ TotalView-ITCH 5.0 recorded day, mode %s ===\n", o.mode.c_str());
     std::printf("run: %s local | command: %s\n", when, cmd.c_str());
     const std::vector<CpuSet> cs = cpu_sets();
