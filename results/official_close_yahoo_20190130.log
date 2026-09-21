@@ -1,0 +1,49 @@
+=== official 2019-01-30 closes from Yahoo Finance (chart API), fetched 2026-09-21 01:44 CDT ===
+Yahoo's daily 'close' is adjusted for splits (not dividends). Each close is multiplied back by the product of
+the split ratios Yahoo lists after 2019-01-30 and rounded to the cent. FB is listed as META since 2022.
+Split events from https://query1.finance.yahoo.com/v8/finance/chart/SYMBOL?period1=1548806400&period2=1790000000&interval=3mo&events=split
+
+AAPL  GET https://query1.finance.yahoo.com/v8/finance/chart/AAPL?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 41.3125
+      splits after 2019-01-30 (events=split): 4:1  "date":1598880600,"numerator":4.0,"denominator":1.0,"splitRatio":"4:1" 
+      factor 4 | unadjusted close 165.25
+MSFT  GET https://query1.finance.yahoo.com/v8/finance/chart/MSFT?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 106.37999725341797
+      splits after 2019-01-30 (events=split): none 
+      factor 1 | unadjusted close 106.38
+AMZN  GET https://query1.finance.yahoo.com/v8/finance/chart/AMZN?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 83.52149963378906
+      splits after 2019-01-30 (events=split): 20:1  "date":1654522200,"numerator":20.0,"denominator":1.0,"splitRatio":"20:1" 
+      factor 20 | unadjusted close 1670.43
+GOOGL  GET https://query1.finance.yahoo.com/v8/finance/chart/GOOGL?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 54.89950180053711
+      splits after 2019-01-30 (events=split): 20:1  "date":1658151000,"numerator":20.0,"denominator":1.0,"splitRatio":"20:1" 
+      factor 20 | unadjusted close 1097.99
+META  GET https://query1.finance.yahoo.com/v8/finance/chart/META?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 150.4199981689453
+      splits after 2019-01-30 (events=split): none 
+      factor 1 | unadjusted close 150.42
+INTC  GET https://query1.finance.yahoo.com/v8/finance/chart/INTC?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 47.540000915527344
+      splits after 2019-01-30 (events=split): none 
+      factor 1 | unadjusted close 47.54
+CSCO  GET https://query1.finance.yahoo.com/v8/finance/chart/CSCO?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 46.709999084472656
+      splits after 2019-01-30 (events=split): none 
+      factor 1 | unadjusted close 46.71
+NVDA  GET https://query1.finance.yahoo.com/v8/finance/chart/NVDA?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 3.4347500801086426
+      splits after 2019-01-30 (events=split): 4:1 10:1  "date":1626787800,"numerator":4.0,"denominator":1.0,"splitRatio":"4:1" "date":1718026200,"numerator":10.0,"denominator":1.0,"splitRatio":"10:1" 
+      factor 40 | unadjusted close 137.39
+TSLA  GET https://query1.finance.yahoo.com/v8/finance/chart/TSLA?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 20.584667205810547
+      splits after 2019-01-30 (events=split): 5:1 3:1  "date":1598880600,"numerator":5.0,"denominator":1.0,"splitRatio":"5:1" "date":1661434200,"numerator":3.0,"denominator":1.0,"splitRatio":"3:1" 
+      factor 15 | unadjusted close 308.77
+NFLX  GET https://query1.finance.yahoo.com/v8/finance/chart/NFLX?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 34.066001892089844
+      splits after 2019-01-30 (events=split): 10:1  "date":1763389800,"numerator":10.0,"denominator":1.0,"splitRatio":"10:1" 
+      factor 10 | unadjusted close 340.66
+BKNG  GET https://query1.finance.yahoo.com/v8/finance/chart/BKNG?period1=1548806400&period2=1548892800&interval=1d
+      bar timestamp 1548858600 (2019-01-30 14:30 UTC) | close 72.74800109863281
+      splits after 2019-01-30 (events=split): 25:1  "date":1775482200,"numerator":25.0,"denominator":1.0,"splitRatio":"25:1" 
+      factor 25 | unadjusted close 1818.70

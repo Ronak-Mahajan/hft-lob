@@ -1,0 +1,155 @@
+Environment for the perf_20190130_run_*.log runs and results/replay_20190130_differential.log
+--- build (source commit d17968aa889b4492ddad62285739576a3bfa8dcd, clean tree)
+++ g++ --version
+++ head -1
+++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="d17968aa889b4492ddad62285739576a3bfa8dcd"' '-DLOB_BUILD_FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include"' src/perf_main.cpp -o lob_perf.exe
+++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY '-DLOB_GIT_COMMIT="d17968aa889b4492ddad62285739576a3bfa8dcd"' '-DLOB_BUILD_FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY"' src/perf_main.cpp -o lob_perf_latency.exe
+++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include src/replay_main.cpp -o lob_replay.exe
+++ set +x
+--- run order (local time)
+Mon Sep 21 01:53:00 CDT 2026 start throughput_1
+Mon Sep 21 01:55:35 CDT 2026 end throughput_1
+Mon Sep 21 01:55:42 CDT 2026 start throughput_2
+Mon Sep 21 01:58:15 CDT 2026 end throughput_2
+Mon Sep 21 01:58:22 CDT 2026 start throughput_3
+Mon Sep 21 02:00:55 CDT 2026 end throughput_3
+Mon Sep 21 02:01:02 CDT 2026 start throughput_4
+Mon Sep 21 02:03:35 CDT 2026 end throughput_4
+Mon Sep 21 02:03:42 CDT 2026 start throughput_5
+Mon Sep 21 02:06:14 CDT 2026 end throughput_5
+Mon Sep 21 02:06:22 CDT 2026 start throughput_ecore
+Mon Sep 21 02:10:03 CDT 2026 end throughput_ecore
+Mon Sep 21 02:10:11 CDT 2026 start latency_1
+Mon Sep 21 02:13:46 CDT 2026 end latency_1
+Mon Sep 21 02:13:53 CDT 2026 start latency_2
+Mon Sep 21 02:17:28 CDT 2026 end latency_2
+Mon Sep 21 02:17:35 CDT 2026 start latency_3
+Mon Sep 21 02:21:07 CDT 2026 end latency_3
+Mon Sep 21 02:21:14 CDT 2026 start multicore_demux
+Mon Sep 21 02:26:28 CDT 2026 end multicore_demux
+Mon Sep 21 02:26:35 CDT 2026 start multicore_presplit
+Mon Sep 21 02:31:41 CDT 2026 end multicore_presplit
+Mon Sep 21 02:31:48 CDT 2026 start replay_differential
+Mon Sep 21 02:41:29 CDT 2026 end replay_differential
+Mon Sep 21 02:41:29 CDT 2026 ALL DONE
+--- before each run: power line status, power plan, and the processes that used the most CPU in the 5 s before it
+=== throughput_1 2026-09-21 01:52:54
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome   0.53
+chrome   0.39
+claude   0.22
+kass     0.12
+chrome   0.08
+claude   0.06
+=== throughput_2 2026-09-21 01:55:36
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome                1.05
+kass                  0.42
+claude                0.28
+explorer              0.08
+claude                0.05
+PhoneExperienceHost   0.05
+=== throughput_3 2026-09-21 01:58:15
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome         0.38
+kass           0.14
+claude         0.08
+claude         0.06
+nvsphelper64   0.06
+powershell     0.05
+=== throughput_4 2026-09-21 02:00:55
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome     1.22
+kass       0.67
+ChatGPT    0.08
+claude     0.06
+explorer   0.06
+claude     0.06
+=== throughput_5 2026-09-21 02:03:36
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome             0.83
+kass               0.53
+powershell         0.05
+claude             0.05
+CrashPlanDesktop   0.05
+explorer           0.03
+=== throughput_ecore 2026-09-21 02:06:15
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome       0.64
+kass         0.36
+explorer     0.14
+claude       0.12
+powershell   0.11
+claude       0.08
+=== latency_1 2026-09-21 02:10:04
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome       0.83
+kass         0.41
+claude       0.16
+claude       0.09
+powershell   0.08
+claude       0.08
+=== latency_2 2026-09-21 02:13:46
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome                1.48
+kass                  0.67
+claude                0.11
+PhoneExperienceHost   0.05
+claude                0.05
+explorer              0.05
+=== latency_3 2026-09-21 02:17:29
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome         0.89
+kass           0.41
+claude         0.19
+explorer       0.16
+powershell     0.05
+nvsphelper64   0.03
+=== multicore_demux 2026-09-21 02:21:08
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Spotify        0.75
+chrome         0.44
+kass           0.33
+explorer       0.22
+nvsphelper64   0.17
+claude         0.16
+=== multicore_presplit 2026-09-21 02:26:28
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome     1.56
+kass       0.73
+Spotify    0.55
+explorer   0.28
+chrome     0.27
+chrome     0.25
+=== replay_differential 2026-09-21 02:31:41
+power line: Online | battery 100%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+chrome        0.8
+kass          0.3
+chrome       0.17
+claude       0.12
+explorer     0.08
+powershell   0.08

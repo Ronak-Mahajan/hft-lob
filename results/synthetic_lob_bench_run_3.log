@@ -1,0 +1,45 @@
+=== L2 Limit Order Book - verification & benchmarks ===
+TSC: 3.69 cycles/ns  |  sizeof(Order)=32  sizeof(PriceLevel)=24
+
+[1] Deterministic unit checks
+  all passed
+
+[2] Differential fuzz: 2000000 random ITCH messages (A/F/E/C/X/D/U) vs std::map reference
+  mix: A 366187  F 366464  E 90874  C 91747  X 182295  D 627600  U 274833
+  2000000 messages, 0 mismatches - PASS
+  counters: out-of-band drops 0 | bad-length 0 | live orders 99992
+  reference std::map book: 79.2 ns/msg | flat book (incl. parsing): 43.8 ns/msg | ratio 1.8x
+  (reference-implementation comparison on this stream, single run; not a headline number)
+
+[3] Latency microbench (rdtscp-serialized per op, overhead-subtracted, 1000000 ops)
+  timer pair overhead: 11 ns (subtracted)
+  add   (1M live)    min     13 | p50    161 | p90    193 | p99    306 | p99.9     407 | max    36612  (ns)
+  cancel(random)     min     15 | p50    316 | p90    349 | p99    476 | p99.9     595 | max   144661  (ns)
+  batched averages: add 149.5 ns/op, cancel 75.1 ns/op (pipelined, no fences)
+
+[4] End-to-end ITCH stream throughput (10000000 messages)
+  stream size: 306.1 MB
+  10000000 messages in 0.700 s  ->  14.3 M msgs/s  (70.0 ns/msg)
+  final book: bid 10129 x 8080 | ask 10008 x 3
+  counters: out-of-band drops 0 | bad-length 0 | live orders 200000
+
+[5] ExactOrderBook unit checks (wire units: ladder, overflow, sub-penny and past-int32 prices)
+  all passed
+
+[6] ExactOrderBook differential fuzz: 2000000 generated wire-unit messages, 5 symbols, vs ref::Market
+  2000009 messages, 41 audits (178217 levels, 771060 orders compared in queue order), 0 mismatches - PASS
+  counters: overflow adds 299085 of 904528 | dropped 0 | unknown id 0 | bad-length 0 | live orders 19999
+
+[7] Recorded-day replay path on a crafted ITCH file (lob_replay --fixture)
+  crafted file: 2255 bytes, 65 messages (A 31, F 1, U 6, E 4, C 2, X 2, D 4, and S, R, Q, I, P), 38 adds
+  chunk 2255 bytes: 65 messages | 0 chunk boundaries inside a message (0 inside a length prefix) | compared with the reference after every message, 0 mismatches | overflow adds 13 of 38 | end-of-file books as written out (21 levels, 26 orders) | digest df4dfa823ab6fb8b
+  chunk    1 bytes: 65 messages | 2190 chunk boundaries inside a message (65 inside a length prefix) | compared with the reference after every message, 0 mismatches | overflow adds 13 of 38 | end-of-file books as written out (21 levels, 26 orders) | digest df4dfa823ab6fb8b
+  chunk    2 bytes: 65 messages | 1115 chunk boundaries inside a message (52 inside a length prefix) | compared with the reference after every message, 0 mismatches | overflow adds 13 of 38 | end-of-file books as written out (21 levels, 26 orders) | digest df4dfa823ab6fb8b
+  chunk   37 bytes: 65 messages | 59 chunk boundaries inside a message (0 inside a length prefix) | compared with the reference after every message, 0 mismatches | overflow adds 13 of 38 | end-of-file books as written out (21 levels, 26 orders) | digest df4dfa823ab6fb8b
+  chunk   64 bytes: 65 messages | 34 chunk boundaries inside a message (1 inside a length prefix) | compared with the reference after every message, 0 mismatches | overflow adds 13 of 38 | end-of-file books as written out (21 levels, 26 orders) | digest df4dfa823ab6fb8b
+  chunk   37 bytes (no differential): 65 messages | 59 chunk boundaries inside a message (0 inside a length prefix) | no reference | overflow adds 13 of 38 | end-of-file books as written out (21 levels, 26 orders) | digest df4dfa823ab6fb8b
+  negative control: the cent-denominated benchmark book ($0.01..$1310.72) drops 11 of the 38 adds and holds FXS in 2 bid / 1 ask levels (exact: 4 / 3)
+  crafted-file replay: PASS
+
+All verification passed.
+exit 0

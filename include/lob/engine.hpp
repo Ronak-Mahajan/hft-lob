@@ -25,9 +25,12 @@
 // ---------------------------------------------------------------------------
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <latch>
 #include <memory>
 #include <thread>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "book.hpp"
@@ -75,31 +78,85 @@ struct BookConfig {
     unsigned idmap_log2;
 };
 
-class ParallelEngine {
+// BasicParallelEngine<Book, Units>: the engine over any book type and price
+// conversion. ParallelEngine (below) is the original configuration, one
+// LimitOrderBook per instrument in cent ticks; the recorded-day tools use
+// BasicParallelEngine<ExactOrderBook, itch::WireUnits> with one book per
+// stock_locate built by a factory.
+//
+// Two ways to drive it:
+//   run(buf, len)       the whole stream in memory: start, demux, finish.
+//                       Returns wall seconds from "all workers ready" to
+//                       "all rings drained and workers joined".
+//   start(); { feed(); wait_drained(); }... finish();
+//                       a stream too large for memory, fed one chunk at a
+//                       time. feed() demuxes every whole message of the
+//                       chunk and returns the bytes it consumed, so the
+//                       caller can carry a straddling message into its next
+//                       read; wait_drained() returns once every worker has
+//                       applied everything pushed so far.
+template <class Book = LimitOrderBook, class Units = itch::CentTicks>
+class BasicParallelEngine {
 public:
-    ParallelEngine(unsigned n_workers, uint16_t n_instruments, BookConfig cfg)
-        : W_(n_workers), n_inst_(n_instruments), cfg_(cfg),
+    // Builds the book for one locate, or returns nullptr for a locate that
+    // carries no book (its messages are then skipped). Called on the owning
+    // worker's thread, so the book is first-touched from its core.
+    using Factory = std::function<std::unique_ptr<Book>(uint16_t locate)>;
+
+    // Original constructor: locates 1..n_instruments each get a
+    // LimitOrderBook built from cfg; demux on cpu 0, worker w on cpu w + 1.
+    BasicParallelEngine(unsigned n_workers, uint16_t n_instruments, BookConfig cfg)
+        requires std::is_same_v<Book, LimitOrderBook>
+        : BasicParallelEngine(n_workers, n_instruments, [cfg](uint16_t) {
+              return std::make_unique<LimitOrderBook>(cfg.base_tick, cfg.band,
+                                                      cfg.max_live_orders, cfg.idmap_log2);
+          }) {}
+
+    // `cpus`, when it has at least n_workers + 1 entries, gives the demux
+    // cpu (cpus[0]) and worker w's cpu (cpus[w + 1]); otherwise the demux
+    // takes cpu 0 and worker w cpu w + 1.
+    BasicParallelEngine(unsigned n_workers, uint16_t n_instruments, Factory make,
+                        std::vector<unsigned> cpus = {})
+        : W_(n_workers), n_inst_(n_instruments), make_(std::move(make)),
           rings_(n_workers), books_(size_t{n_instruments} + 1),
           counts_(n_workers)
     {
+        if (cpus.size() < size_t{n_workers} + 1) {
+            cpus.resize(size_t{n_workers} + 1);
+            for (unsigned i = 0; i <= n_workers; ++i) cpus[i] = i;
+        }
+        cpus_ = std::move(cpus);
         for (auto& r : rings_) r = std::make_unique<Ring>();
     }
 
-    // Demux + process a length-prefixed ITCH stream. Caller's thread becomes
-    // the producer (pinned to cpu 0). Returns wall seconds measured from
-    // "all workers ready" to "all rings drained and workers joined".
+    ~BasicParallelEngine() { if (started_ && !finished_) finish(); }
+    BasicParallelEngine(const BasicParallelEngine&) = delete;
+    BasicParallelEngine& operator=(const BasicParallelEngine&) = delete;
+
     double run(const uint8_t* buf, size_t len) {
-        std::atomic<bool> done{false};
-        std::latch ready(static_cast<ptrdiff_t>(W_) + 1);
-        std::vector<std::thread> threads;
-        threads.reserve(W_);
-        for (unsigned w = 0; w < W_; ++w)
-            threads.emplace_back([&, w] { worker_main(w, ready, done); });
-
-        pin_current_thread(0);
-        ready.arrive_and_wait();          // books built, everyone pinned
+        start();
         auto t0 = std::chrono::steady_clock::now();
+        feed(buf, len);
+        finish();
+        auto t1 = std::chrono::steady_clock::now();
+        return std::chrono::duration<double>(t1 - t0).count();
+    }
 
+    // Spawns and pins the workers, pins the caller as the demux, and returns
+    // once every worker has built its books.
+    void start() {
+        started_ = true;
+        ready_ = std::make_unique<std::latch>(static_cast<ptrdiff_t>(W_) + 1);
+        threads_.reserve(W_);
+        for (unsigned w = 0; w < W_; ++w)
+            threads_.emplace_back([this, w] { worker_main(w); });
+        pin_current_thread(cpus_[0]);
+        ready_->arrive_and_wait();        // books built, everyone pinned
+    }
+
+    // Demuxes every whole length-prefixed message in [buf, buf + len) and
+    // returns the bytes consumed (a trailing partial message is left).
+    size_t feed(const uint8_t* buf, size_t len) {
         const uint8_t* p   = buf;
         const uint8_t* end = buf + len;
         while (p + 2 <= end) {
@@ -123,14 +180,27 @@ public:
                 _mm_pause();              // backpressure: shard is saturated
             p += 2 + mlen;
         }
-        done.store(true, std::memory_order_release);
-        for (auto& t : threads) t.join();
-        auto t1 = std::chrono::steady_clock::now();
-        return std::chrono::duration<double>(t1 - t0).count();
+        return static_cast<size_t>(p - buf);
     }
 
-    LimitOrderBook*       book(uint16_t locate)       { return books_[locate].get(); }
-    const LimitOrderBook* book(uint16_t locate) const { return books_[locate].get(); }
+    // Returns once every message pushed so far has been applied. A worker
+    // publishes its ring's head only after applying the batch, so a drained
+    // ring means its books are up to date.
+    void wait_drained() {
+        for (auto& r : rings_)
+            while (!r->drained()) _mm_pause();
+    }
+
+    void finish() {
+        done_.store(true, std::memory_order_release);
+        for (auto& t : threads_) t.join();
+        finished_ = true;
+    }
+
+    unsigned workers() const { return W_; }
+    unsigned cpu(unsigned i) const { return cpus_[i]; }   // 0: demux, w + 1: worker w
+    Book*       book(uint16_t locate)       { return books_[locate].get(); }
+    const Book* book(uint16_t locate) const { return books_[locate].get(); }
     uint64_t processed(unsigned w) const { return counts_[w].v; }
 
     // Messages a worker refused because the length prefix did not match
@@ -151,34 +221,34 @@ public:
     }
 
 private:
-    using Ring = SpscRing<14>;            // 16384 slots × 64B = 1 MB/shard
+    using Ring = SpscRing<14>;            // 16384 slots x 64B = 1 MB/shard
 
     struct alignas(kIsolate) PaddedU64 { uint64_t v = 0; uint64_t bad_len = 0; };
 
-    void worker_main(unsigned wid, std::latch& ready, std::atomic<bool>& done) {
-        pin_current_thread(wid + 1);
+    void worker_main(unsigned wid) {
+        pin_current_thread(cpus_[wid + 1]);
         // First-touch: build the books this worker owns from its own core.
-        // Workers write disjoint books_ entries → no synchronization needed.
-        for (uint16_t loc = 1; loc <= n_inst_; ++loc)
-            if (loc % W_ == wid)
-                books_[loc] = std::make_unique<LimitOrderBook>(
-                    cfg_.base_tick, cfg_.band, cfg_.max_live_orders,
-                    cfg_.idmap_log2);
-        ready.arrive_and_wait();
+        // Workers write disjoint books_ entries, so no synchronization needed.
+        for (uint32_t loc = 1; loc <= n_inst_; ++loc)
+            if (loc % W_ == wid) books_[loc] = make_(static_cast<uint16_t>(loc));
+        ready_->arrive_and_wait();
 
         Ring& ring = *rings_[wid];
         uint64_t n_done = 0;
         uint64_t bad_len = 0;
         auto handle = [&](const MsgSlot& s) {
             uint16_t locate = static_cast<uint16_t>((s.data[1] << 8) | s.data[2]);
-            if (LOB_LIKELY(locate >= 1 && locate <= n_inst_))
-                itch::dispatch_checked(*books_[locate], s.data, s.len, bad_len);
+            if (LOB_LIKELY(locate >= 1 && locate <= n_inst_)) {
+                Book* b = books_[locate].get();
+                if (LOB_LIKELY(b != nullptr))
+                    itch::dispatch_checked<Units>(*b, s.data, s.len, bad_len);
+            }
         };
         unsigned idle = 0;
         for (;;) {
             uint64_t n = ring.consume_batch(handle);
             if (LOB_LIKELY(n != 0)) { n_done += n; idle = 0; continue; }
-            if (done.load(std::memory_order_acquire)) {
+            if (done_.load(std::memory_order_acquire)) {
                 // done was published AFTER the final push (release/acquire),
                 // so one more drain loop is guaranteed to see everything.
                 while ((n = ring.consume_batch(handle)) != 0) n_done += n;
@@ -188,7 +258,7 @@ private:
             // ring's tail_ line in Shared state, so every producer push to
             // this shard pays a request-for-ownership - idle consumers were
             // measurably slowing the producer down. Backoff caps at ~64
-            // pauses (≈ a few hundred ns of added wake-up latency; a
+            // pauses (a few hundred ns of added wake-up latency; a
             // latency-critical deployment would bound this lower).
             for (unsigned s = 1u << (idle < 6 ? idle : 6); s; --s)
                 _mm_pause();
@@ -200,11 +270,19 @@ private:
 
     unsigned   W_;
     uint16_t   n_inst_;
-    BookConfig cfg_;
+    Factory    make_;
+    std::vector<unsigned>                        cpus_;
     std::vector<std::unique_ptr<Ring>>           rings_;
-    std::vector<std::unique_ptr<LimitOrderBook>> books_;
+    std::vector<std::unique_ptr<Book>>           books_;
     std::vector<PaddedU64>                       counts_;
+    std::vector<std::thread>                     threads_;
+    std::unique_ptr<std::latch>                  ready_;
+    std::atomic<bool>                            done_{false};
+    bool       started_ = false, finished_ = false;
     uint64_t   demux_bad_length_ = 0;
 };
+
+// The original engine: one LimitOrderBook per instrument, cent ticks.
+using ParallelEngine = BasicParallelEngine<>;
 
 } // namespace lob

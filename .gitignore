@@ -5,7 +5,19 @@
 /lob_bench
 /lob_parallel
 /spsc_stress
+/lob_replay
+/lob_perf
+/lob_perf_latency
 ci.log
+
+# Market data is never committed: data/MANIFEST.md names the source file, its
+# sizes and hashes instead. Downloads go in data/, which keeps only that file.
+/data/*
+!/data/MANIFEST.md
+*.NASDAQ_ITCH50
+*.NASDAQ_ITCH50.gz
+*.itch
+*.itch.gz
 
 # Local tooling
 .venv/

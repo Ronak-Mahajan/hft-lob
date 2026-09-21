@@ -1,69 +1,260 @@
-# hft-lob: Ultra-Low-Latency L2 Limit Order Book (C++20)
+# hft-lob: NASDAQ ITCH 5.0 limit order book (C++20)
 
-A production-style Level 2 order book reconstructor for NASDAQ ITCH 5.0:
-O(1) add / cancel / execute / replace, zero dynamic allocation and zero locks
-on the critical path. On a **synthetic** ITCH 5.0 feed, end-to-end single-core
-throughput measures **4.2-10.6M messages/second** across the two machines
-benchmarked in *Phase 5*.
+Level 2 order book reconstruction for NASDAQ TotalView-ITCH 5.0. Add, cancel,
+execute and replace are O(1) on a flat per-symbol price ladder, with no
+allocation and no locks on that path. A price the ladder does not hold rests,
+exactly, in a per-side overflow, so no order is ever dropped or rounded.
 
-The feed is generated in-process by the mock in `src/`. This repo contains no
-recorded NASDAQ data, and every number below comes from that generated stream.
-Throughput depends on the host as much as on the code: the slower of the two
-machines measures about half the faster one's single-core rate, and both vary
-run to run, so read the figures as measurements on the two named machines
-rather than as a spec.
+## Result: NASDAQ's full trading day of 2019-01-30
 
-## Layout
+`lob_replay` replays NASDAQ's public historical TotalView-ITCH 5.0 sample file
+for 2019-01-30, the whole day: 368,366,634 messages (11,245,883,092 bytes
+decompressed) into 8,695 order books, one per `stock_locate` that carries
+orders.
 
-```
-include/lob/common.hpp      byte-order shims, rdtsc/rdtscp, branch hints
-include/lob/order_pool.hpp  Phase 1: Order (32B), slab OrderPool, flat OrderIdMap
-include/lob/book.hpp        Phase 2: PriceLevel, BookSide<IsBid>, LimitOrderBook
-include/lob/itch.hpp        Phase 3: zero-copy ITCH 5.0 dispatch + FeedHandler
-src/main.cpp                Phase 4: unit checks, differential fuzz, benchmarks
-include/lob/spsc.hpp        Phase 5: wait-free SPSC ring (128B isolation,
-                            cached indices, capped batches)
-include/lob/engine.hpp      Phase 5: sharded multi-core engine (demux, rings,
-                            pinned workers, locate % W sharding)
-src/parallel_main.cpp       Phase 5: parallel-vs-sequential verification +
-                            scaling benchmarks
-src/spsc_stress.cpp         Phase 5: sequence-checked SPSC ring stress (the
-                            ThreadSanitizer target in CI)
-.github/workflows/ci.yml    g++ / clang++ / MinGW builds, ASan+UBSan and
-                            TSan legs (correctness only, see Reproducibility)
-```
+- **Every book reconstructed, nothing dropped or rounded.** 0 orders dropped,
+  0 unknown order ids, 0 malformed messages. Prices stay in ITCH's native
+  $0.0001 units, so sub-penny levels stay separate, and the 587,096 adds
+  priced outside $0.01-$1,310.72 (AMZN and BKNG trade above that range) are
+  held exactly.
+- **Zero mismatches against a reference.** A deliberately naive reference
+  model that shares no code with the book processed the same messages. At
+  all 76 checkpoints of the day every book was compared with it in full:
+  660,820 book comparisons covering 49,562,417 price levels and 119,295,162
+  queued orders, order by order. Mismatches: **0**.
+- **The closing crosses match the official closes.** For **10 of 10**
+  symbols checked (AAPL, MSFT, AMZN, GOOGL, FB, INTC, CSCO, NVDA, TSLA,
+  NFLX), the closing cross price in the file equals the official closing
+  price to the cent. An independent decoder that shares no code with the book
+  counts the same messages by type and prints the same books for those ten
+  symbols at 16:00 ET.
+- **Per-message latency over the whole day.** Every one of the 368,366,634
+  messages timed on its own, on one P-core: **p50 183 ns, p90 469 ns, p99
+  1,082 ns, p99.9 1,516 ns**.
+- **Throughput over the whole day.** **8.91M messages/second** on one P-core
+  (median of five runs, 112.22 ns/message; range 8.85-9.06M), **52.54M**
+  through one demux thread feeding five workers, and **99.80M** aggregate
+  with the input pre-split across 13 workers.
+
+Machine: Intel Core Ultra 7 265H laptop (6 P-cores, 8 E-cores, 2 low-power
+E-cores, no SMT), Windows 11, on AC power; g++ 16.1.0, `-O3 -march=native`.
+Not measured: memory use, the core clock during the runs, and any other
+machine or OS. The multi-core configurations ran once each.
+
+| Figures | Committed console output |
+|---|---|
+| replay, drops, reference comparison | [`results/replay_20190130_differential.log`](results/replay_20190130_differential.log) |
+| closing crosses vs official closes | [`results/closing_cross_20190130.md`](results/closing_cross_20190130.md), from [`itch_count_20190130.log`](results/itch_count_20190130.log), [`closing_cross_replay_20190130.log`](results/closing_cross_replay_20190130.log) and [`official_close_yahoo_20190130.log`](results/official_close_yahoo_20190130.log) |
+| per-message latency | [`results/perf_20190130_run_latency_1.log`](results/perf_20190130_run_latency_1.log) (runs 2 and 3 alongside) |
+| throughput | `results/perf_20190130_run_throughput_{1..5}.log`, `results/perf_20190130_run_multicore_{demux,presplit}.log`, all collected in [`results/perf_20190130.json`](results/perf_20190130.json) |
+| the input file, and the command behind every result | [`data/MANIFEST.md`](data/MANIFEST.md) |
+
+## Recorded-day replay
+
+`lob_replay` (`src/replay_main.cpp`, the run itself in `src/replay_run.hpp`)
+streams the decompressed file in 256 MB chunks, carrying a message that
+straddles two chunks into the next, and applies every message through the
+same `itch::dispatch_checked` as the benchmarks into one `ExactOrderBook` per
+`stock_locate`. The file is not in this repo; `data/MANIFEST.md` gives its
+source, sizes and SHA-256.
+
+**Sizing comes from a pre-scan.** The replay reads the file twice. Pass 1
+counts and length-checks every message, reads the Stock Directory, finds each
+symbol's peak resting-order count and keeps its add prices; pass 2 is the
+replay. A book's tick is one cent when the symbol's median add price is at
+least $1.00 (Reg NMS Rule 612 keeps displayed quotes there in whole cents) and
+$0.0001 below that: 8,323 books on a $0.01 grid and 372 on $0.0001. Ladder
+widths, from 64 to 131,072 ticks, come from a greedy split of a 1,024 MB
+ladder budget by adds covered per tick, each ladder placed on the window
+where that symbol's adds arrived. 191,722,488 of the day's 191,919,099 adds
+(99.898%) landed on a ladder and the other 196,611 in the overflow, exactly
+as the pre-scan predicted. The pre-scan sets sizes only: an add that misses
+the ladder rests in the overflow, so the reconstructed books do not depend
+on it.
+
+The reference (`src/ref_market.hpp`) decodes every message from the
+specification's byte offsets rather than the packed structs, keeps exact
+prices as `std::map` keys with no ladder or tick, holds every order of the
+market in one `std::unordered_map`, and keeps each level's queue as a
+`std::list`. With `--differential` it processes the same messages, and at
+every checkpoint every book is compared with it in full (`src/book_diff.hpp`):
+both sides level by level (price, aggregate shares, order count), every queue
+order by order (reference number, remaining shares), the BBO and the
+resting-order count.
+
+From [`results/replay_20190130_differential.log`](results/replay_20190130_differential.log):
+
+| | |
+|---|---:|
+| messages | 368,366,634 |
+| add orders `A` / `F` | 162,970,455 / 1,725,898 |
+| executions `E` / `C` | 8,096,995 / 158,886 |
+| cancels `X`, deletes `D`, replaces `U` | 4,669,874 / 158,273,361 / 27,222,746 |
+| stock_locates in the directory / with order messages | 8,713 / 8,695 |
+| bad-length messages, orders dropped, unknown order ids | 0 / 0 / 0 |
+| adds on a ladder / in the overflow | 191,722,488 / 196,611 |
+| checkpoints (every 5M messages, 12:00 and 16:00 ET, end of file) | 76 |
+| price levels / queued orders compared | 49,562,417 / 119,295,162 |
+| **mismatches** | **0** |
+| resting orders at end of file | 0 |
+
+The log also prints the books of AAPL, MSFT, AMZN, BKNG and WFT (a sub-dollar
+stock on the $0.0001 grid) at 12:00 and 16:00 ET, and the opening and closing
+cross prices the file carries. BRK.A is not in this day's stock directory.
+After every 256 MB chunk the replay prints a digest of the full state of
+every book (each level's price, shares and order count, and each queue order
+by order; `books_digest()` in `src/replay_day.hpp`); the performance runs
+below print the same digests, which is how they are tied to this run. The
+dispatch time a differential run prints is not a measurement: the reference
+runs between the timed segments and evicts the books from cache.
+
+`tools/itch_count.cpp` is a second, independent decoder: it includes nothing
+from `include/lob` or `src` and decodes every field by byte offset. Its
+counts ([`results/itch_count_20190130.log`](results/itch_count_20190130.log))
+equal the replay's for every message type, and the file ends exactly on a
+message boundary.
+
+## Closing crosses vs official closes
+
+From [`results/closing_cross_20190130.md`](results/closing_cross_20190130.md).
+For a NASDAQ-listed stock the closing cross price is the NASDAQ Official
+Closing Price. The file's closing cross ('Q' message, cross type 'C') is
+compared with the official close from Yahoo Finance's daily bars, with
+Yahoo's later split adjustments undone
+([`tools/official_close_yahoo.sh`](tools/official_close_yahoo.sh)):
+
+| | AAPL | MSFT | AMZN | GOOGL | FB | INTC | CSCO | NVDA | TSLA | NFLX |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| closing cross in the file | 165.25 | 106.38 | 1670.43 | 1097.99 | 150.42 | 47.54 | 46.71 | 137.39 | 308.77 | 340.66 |
+| official close | 165.25 | 106.38 | 1670.43 | 1097.99 | 150.42 | 47.54 | 46.71 | 137.39 | 308.77 | 340.66 |
+
+All ten are equal to the cent. At 16:00:00.000 ET `lob_replay` and the
+independent decoder print identical books for all ten (resting orders, level
+counts, and the top five levels with shares and order counts). At the moment
+each closing cross is published, the independent decoder's book has
+bid <= cross price <= ask for all ten.
+
+## Recorded-day performance
+
+`lob_perf` (`src/perf_main.cpp`) builds the same books as `lob_replay` from
+the same pre-scan and streams the same file in 256 MB chunks. Every figure
+here: the 265H laptop above, on AC power, Windows 11 on the Balanced power
+plan, with a browser and other everyday applications open; g++ 16.1.0,
+`-O3 -march=native -DNDEBUG`, binaries built from commit `d17968a`. Each run
+pins its thread (logical CPU 1, a P-core, unless stated) and raises the
+process to high priority. The raw console output of every run is a
+`results/perf_20190130_run_*.log` file, and
+[`results/perf_20190130.json`](results/perf_20190130.json) collects every
+number, generated from those logs by `tools/perf_json.pl`.
+
+**Single core, end to end.** Every message is framed, length-checked, routed
+to its `stock_locate` book and applied (`dispatch_segment()`, the loop
+`lob_replay` uses). Only that loop over a chunk already in memory is timed,
+and the 42 chunk times are summed; file reads, the pre-scan and the digests
+are outside the timed region. This build has no per-message instrumentation.
+From `results/perf_20190130_run_throughput_{1..5}.log`:
+
+| run | 1 | 2 | 3 | 4 | 5 |
+|---|---:|---:|---:|---:|---:|
+| M messages/s | 8.85 | 9.02 | 9.06 | 8.90 | 8.91 |
+| ns/message | 112.97 | 110.82 | 110.33 | 112.34 | 112.22 |
+
+Min / median / max: 8.85 / 8.91 / 9.06M messages/second. One run pinned to
+logical CPU 2, an E-core, measured 6.30M messages/second (158.61 ns/message;
+`results/perf_20190130_run_throughput_ecore.log`).
+
+**Per-message latency.** A separate build, `lob_perf_latency`
+(`-DLOB_PERF_LATENCY`), times every one of the day's 368,366,634 messages on
+its own, with no sampling: `lfence; rdtsc`, the book lookup and
+`dispatch_checked`, then `rdtscp; lfence`. The minimum of 100,000 empty timer
+pairs (38 cycles) is subtracted from every sample. Cycles go into an exact
+histogram per message type, and percentiles are nearest-rank. The TSC is
+invariant; CPUID 15h reports 3.686400 GHz, and the tool measures it against
+`QueryPerformanceCounter`, in five 1 s windows and over the whole pass
+(3.686398 GHz in every run). Run 1
+([`results/perf_20190130_run_latency_1.log`](results/perf_20190130_run_latency_1.log)),
+in nanoseconds:
+
+| type | messages | p50 | p90 | p99 | p99.9 | max |
+|---|---:|---:|---:|---:|---:|---:|
+| `A` add | 162,970,455 | 184 | 341 | 692 | 998 | 3,444,762 |
+| `F` add with MPID | 1,725,898 | 193 | 417 | 763 | 1,500 | 752,360 |
+| `E` execute | 8,096,995 | 185 | 614 | 1,271 | 1,638 | 612,511 |
+| `C` execute at price | 158,886 | 110 | 425 | 1,200 | 1,635 | 116,607 |
+| `X` partial cancel | 4,669,874 | 80 | 365 | 948 | 1,421 | 3,230,745 |
+| `D` delete | 158,273,361 | 177 | 591 | 1,227 | 1,601 | 2,930,690 |
+| `U` replace | 27,222,746 | 224 | 564 | 1,087 | 1,546 | 2,428,755 |
+| other (not applied) | 5,248,419 | 7 | 26 | 42 | 139 | 171,168 |
+| **all messages** | **368,366,634** | **183** | **469** | **1,082** | **1,516** | 3,444,762 |
+
+Run 3 agrees within 1% (all messages: p50 181, p99 1,072, p99.9 1,508). In
+run 2 the empty-timer calibration read 76 cycles instead of 38, which
+over-subtracts every sample; its log is committed and its p99 (1,073) and
+p99.9 (1,512) agree, but it is not used for the headline. Each sample is one
+message timed in isolation behind a serializing fence, so the mean (231 ns)
+is higher than the 112.22 ns/message of the median throughput run, where
+consecutive messages overlap. The maxima, in the milliseconds, are the thread
+being interrupted or preempted by the OS during that message.
+
+**Multi-core.** The books are sharded by `stock_locate % W`, as in
+`engine.hpp`. *Demux*: one thread reads each chunk and routes every message
+through W SPSC rings to W workers (`BasicParallelEngine<ExactOrderBook,
+WireUnits>`), timed from the first push of a chunk until every ring is
+drained. *Presplit*: each chunk is first split per shard outside the timed
+region, then W workers apply their own buffers in parallel, timed from the
+start signal until the last worker finishes; it measures the books without
+any demux. The main thread is on logical CPU 0; workers take CPUs 1, 10, 11,
+12 and 13 (P-cores), then 2 to 9 (E-cores). One run each, aggregate M
+messages/second, from `results/perf_20190130_run_multicore_demux.log` and
+`results/perf_20190130_run_multicore_presplit.log`:
+
+| W | 1 | 2 | 3 | 4 | 5 | 8 | 13 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| demux | 8.71 | 18.68 | 30.19 | 40.16 | **52.54** | 43.15 | 36.92 |
+| presplit | 8.81 | 19.14 | 31.26 | 42.14 | 58.64 | 64.76 | **99.80** |
+
+Beyond five workers the demux configurations add E-cores and get slower; the
+busiest of 13 shards carries 1.24 times the mean load.
+
+**Same books in every run.** Each of the runs above (throughput, latency,
+both multi-core modes at every W) printed the book digest after each of the
+42 chunks, and every digest equals the one the differential run printed at
+the same point. Every run also ends with 0 bad-length messages, 0 dropped
+orders, 0 unknown order ids, and 196,611 adds in the overflow, as the
+pre-scan predicted.
 
 ## Architecture decisions
 
 | Concern | Choice | Rejected alternative |
 |---|---|---|
-| Order storage | 32-byte POD in a pre-allocated slab, addressed by `u32` index (2 orders / cache line) | heap `Order*` (allocation + 8-byte pointers + fragmentation) |
+| Order storage | 32-byte POD in a pre-allocated slab, addressed by `u32` index (2 orders per cache line) | heap `Order*` (allocation, 8-byte pointers, fragmentation) |
 | Free management | intrusive LIFO free list through `Order::next` (hottest slot reused first) | `std::deque` free queue |
-| Order id lookup | flat open-addressing map, Fibonacci hash, linear probe, backward-shift erase (no tombstone decay over a 6.5h session) | `std::unordered_map` (node-based, ~2 misses + malloc per op) |
-| Price ladder | flat tick-indexed array per side: `levels[price - base]`, O(1) unconditionally | `std::map` (O(log n) + serialized pointer-chase misses) |
-| Best-price rediscovery | occupancy bitmap + `tzcnt`/`lzcnt` (64 prices/instruction; next level is almost always in the same word because activity clusters at the inside) | linear level scan |
+| Order id lookup | flat open-addressing map, Fibonacci hash, linear probe, backward-shift erase (no tombstones to decay over a trading day) | `std::unordered_map` (node-based: a pointer chase per lookup and an allocation per insert) |
+| Price ladder | flat tick-indexed array per side, `levels[(price - base) / tick]`; the divide is one multiply-high by a precomputed reciprocal, skipped when the tick is 1 | `std::map` (O(log n), serialized pointer-chase misses) |
+| Price band | **per symbol**: every `stock_locate` gets its own ladder base and width (64 to 131,072 ticks on 2019-01-30), placed by a pre-scan where that symbol's adds arrive, within a 1,024 MB total ladder budget. *Trade-off*: the replay reads the file twice to size the books; a live feed handler would size from the previous day instead. | one band for every symbol: the benchmark book's $0.01-$1,310.72 cannot hold AMZN or BKNG |
+| Price units and tick | ITCH's **native $0.0001 units**; a book's tick is $0.01 when its symbol's median add is at least $1.00 and $0.0001 below. *Trade-off*: a tick other than 1 costs one multiply-high per lookup, and a price between two grid points (a sub-penny price in a dollar stock) cannot use the ladder. | whole cents everywhere, which merges distinct sub-penny prices into one level |
+| Prices off the ladder | **exact overflow**: a `std::map` per side from price to a level holding the same pool FIFO as a ladder level; BBO and depth merge the two by price, and a replace can move an order between them. *Trade-off*: that path is O(log n) and allocates one node per new level; on 2019-01-30 it took 196,611 of 191,919,099 adds (0.102%). | dropping off-band adds and counting them (what the ladder-only `LimitOrderBook` of the benchmarks does), or rounding them onto the ladder |
+| Ladder-only vs exact book | one template, `BasicOrderBook<WithOverflow>`: `LimitOrderBook` compiles to exactly the ladder-only code the synthetic benchmarks time, `ExactOrderBook` adds the grid and the overflow | a runtime flag, which puts a branch in the benchmark book's hot path |
+| Best-price rediscovery | occupancy bitmap + `tzcnt`/`lzcnt` (64 prices per instruction; the next level is almost always in the same word because activity clusters at the inside) | linear level scan |
 | Queue at a level | intrusive doubly-linked FIFO via pool indices | `std::list` / `std::deque` per level |
-| Side dispatch | `BookSide<IsBid>` template; comparison & scan direction compile-time | runtime branch per touch |
-| Parsing | `#pragma pack(1)` wire-mirror structs + `reinterpret_cast` + one `bswap` per field | field-by-field copy-out |
-| Threading | single writer per book (feed is inherently sequential); shard symbols across cores, SPSC queues at the edges | locks/atomics inside the book |
+| Side dispatch | `BookSide<IsBid>` template; comparison and scan direction compile-time | runtime branch per touch |
+| Parsing | `#pragma pack(1)` wire-mirror structs + `reinterpret_cast` + one `bswap` per field, after the length prefix is checked against the ITCH 5.0 table | field-by-field copy-out |
+| Threading | single writer per book (the feed is inherently sequential); shard symbols across cores, SPSC rings at the edges | locks/atomics inside the book |
 
-## Phase 5: multi-core scale (single-writer shards, wait-free rings)
-
-Whole-market processing: a demux thread peeks `stock_locate` (2 bytes, no
-decode) and routes raw messages through wait-free SPSC rings to workers that
-own disjoint instrument sets (`locate % W`). Per-instrument message order is
-preserved end-to-end, so the single-writer Phase 2 book is reused unchanged:
-zero locks, zero atomics in the book itself.
-
-Key mechanics (`spsc.hpp`):
-- head/tail publications isolated on **128-byte** boundaries (Intel's
-  adjacent-line prefetcher moves cache-line pairs, so 64B padding still
+**Multi-core mechanics** (`include/lob/spsc.hpp`, `include/lob/engine.hpp`).
+A demux thread peeks `stock_locate` (2 bytes, no decode) and routes raw
+messages through wait-free SPSC rings to workers that own disjoint instrument
+sets (`locate % W`). Per-instrument message order is preserved end to end,
+so the single-writer book is reused unchanged: no locks and no atomics in
+the book itself. In the ring:
+- head/tail publications are isolated on **128-byte** boundaries (Intel's
+  adjacent-line prefetcher moves cache-line pairs, so 64-byte padding still
   false-shares)
 - each side keeps a private **cached copy** of the other's index; the shared
-  line is touched ~once per batch, not once per message
-- consumer batches capped at 256 slots so `head` publication stays fresh;
+  line is touched about once per batch, not once per message
+- consumer batches are capped at 256 slots so `head` publication stays fresh;
   uncapped draining of a full ring head-of-line-blocks the producer
-- exponential backoff on empty polls: a spinning consumer holds `tail_` in
+- empty polls back off exponentially: a spinning consumer holds `tail_` in
   Shared state and taxes every producer push with an RFO
 - 64-byte message slots: one line per message, hardware-prefetch friendly
 
@@ -75,36 +266,155 @@ itself is not a lock-free data structure and does not need to be. It is
 sharding by `stock_locate` is what makes it scale. The pipeline as a whole is
 not non-blocking: the rings are bounded, so a full ring makes the demux spin
 until its worker drains it. `spsc_stress` prints that full-stall count on
-every run, and it is not small.
+every run.
 
-Verification: the same generated 16M-message / 128-instrument stream is run
-through the parallel engine (8 workers) and a single thread; **the full-band
-depth of every instrument must be identical**, level by level, along with the
-processed-message count and the drop / bad-length counters (proves the
-sharding invariant).
+## Synthetic benchmarks: the book in isolation
 
-Measured on the **synthetic** stream above (Core Ultra 9 275HX, 8P+16E,
-Windows 11). Single core, end to end: 8.5-10.6M msgs/s across six idle runs,
-best recorded run 13.8M. Throughput is sensitive to turbo and DRAM contention,
-so read 10M as this machine's round number and not as a floor anywhere else.
-A single demux feeding 8 workers reaches ~49M msgs/s and is demux-bound beyond
-that. **Only with the feed pre-split per shard** (exactly how NASDAQ
-distributes ITCH across parallel MoldUDP channels, with the split done offline,
-outside the timed region) do 23 workers measure **113-120M msgs/s aggregate**,
-best recorded run 148M. Through a single demux thread, the same machine does
-not reach that figure.
+`lob_bench` and `lob_parallel` generate an ITCH 5.0 stream in-process and read
+no market data. They measure the ladder-only `LimitOrderBook` in isolation,
+on streams whose prices stay inside its band, and they are what CI runs, in
+`--quick` mode, for correctness (see *Tests and CI*). These figures are from
+the same 265H laptop, built from commit `eaeb960` with the `-O3 -march=native
+-DNDEBUG` lines in *Build & run*; the environment before each run is in
+[`results/replay_synthetic_run_env.log`](results/replay_synthetic_run_env.log).
 
-The second machine shows how much the host matters. On a Core Ultra 7 265H
-(16 cores, Windows 11, other work running) the same binaries measure
-4.2-6.4M msgs/s single core, 10.5-15M through a demux with 8 workers, and
-40-54M aggregate across 15 pre-split channels. Those spans are repeated runs
-on a machine that was not idle, and the low end of each is what a loaded
-laptop gives you.
+**`lob_bench`, one book, one core** (pinned with `--cpu 1`, a P-core; three
+runs, `results/synthetic_lob_bench_run_{1,2,3}.log`). End to end is the
+binary ITCH stream through the feed handler into the book, 10M generated
+messages; the latency rows time single `add` and `cancel` calls with
+`rdtscp`, timer overhead subtracted, with 1M orders resting and cancels in
+random order.
+
+| run | 1 | 2 | 3 |
+|---|---:|---:|---:|
+| end to end, M messages/s | 14.4 | 13.7 | 14.3 |
+| end to end, ns/message | 69.4 | 73.0 | 70.0 |
+| `add` p50 / p99 / p99.9, ns | 157 / 283 / 352 | 160 / 283 / 369 | 161 / 306 / 407 |
+| `cancel` p50 / p99 / p99.9, ns | 311 / 471 / 585 | 315 / 471 / 584 | 316 / 476 / 595 |
+
+The generated stream drives a single book. The recorded day spreads the same
+work over 8,695 books with 1,024 MB of ladders, 73 MB of order pools and
+106 MB of id maps (sizes from the differential log), and measures 8.91M
+messages/second on the same logical CPU.
+
+**`lob_parallel`, 128 books over W workers** (one run,
+[`results/synthetic_lob_parallel_run_1.log`](results/synthetic_lob_parallel_run_1.log)):
+a 16M-message stream over 128 instruments. Before any table is printed, the
+sharded engine (W = 8) and one thread must produce identical full-band depth
+for every instrument; they did. One unpinned thread applies the stream at
+5.8M messages/second. The demux thread runs on CPU 0 and worker w on logical
+CPU w + 1, which on the 265H mixes the core types: CPUs 1 and 10-13 are
+P-cores, 2-9 E-cores, 14-15 low-power E-cores. Aggregate M messages/second:
+
+| W | 1 | 2 | 4 | 8 | 12 | 15 |
+|---|---:|---:|---:|---:|---:|---:|
+| one demux thread feeding W workers | 6.3 | 5.0 | 13.2 | 32.2 | 38.9 | 19.4 |
+| stream pre-split per worker, no demux | 6.1 | 7.4 | 22.0 | 49.8 | 65.8 | 63.0 |
+
+In CI both binaries run in `--quick` mode on every push, at reduced message
+counts; the rates a shared runner prints there are not measurements.
+
+## Tests and CI
+
+`lob_bench` runs, in order, and exits non-zero on any failed check:
+1. deterministic unit checks (FIFO priority, BBO transitions, replace semantics)
+2. **differential fuzz**: 2M generated ITCH messages from a fixed seed
+   (`A`/`F`/`E`/`C`/`X`/`D`/`U`, all seven types present and counted in the
+   printed mix) replayed simultaneously into this book and a naive
+   `std::map` + `std::unordered_map` reference. The fast book reads the wire
+   bytes through the length-validated dispatch, so the parser is on trial too,
+   while the reference replays the generator's decoded op list. BBO is
+   compared after *every* message, and every price level in the whole
+   131,072-tick band is audited against the reference at regular intervals. A
+   corrupt-length frame must be refused and counted, never parsed
+3. per-op latency percentiles (`rdtscp`-serialized, timer overhead subtracted)
+4. end-to-end binary-stream throughput through the feed handler, with the
+   out-of-band-drop / bad-length / live-order counters
+5. `ExactOrderBook` unit checks: the first and last ladder ticks and one past
+   them, overflow below, above and between grid points, replaces that move an
+   order onto and off the ladder, a FIFO inside one overflow level, sub-penny
+   and past-int32 prices, and the reciprocal division behind the ladder index
+6. `ExactOrderBook` differential fuzz: 2M generated wire-unit messages over
+   five symbols whose ladders the prices straddle, through `ExactOrderBook`s
+   and the `ref::Market` reference used by the replay, with a full audit of
+   depth and queue order 41 times per run
+7. **the recorded-day replay path on a crafted file** (`src/replay_fixture.hpp`,
+   also `lob_replay --fixture`): a hand-built 65-message ITCH 5.0 BinaryFILE
+   with sub-penny prices, prices far outside every ladder ($0.0001,
+   $199,999.99, the largest u32 price, a $1,650 symbol and a $300,000 one),
+   replaces that cross the ladder boundary both ways, and executions,
+   cancels and deletes in the overflow. The `lob_replay` run (chunked reader,
+   pre-scan, sizing, dispatch, reference differential) replays it with the
+   whole file as one chunk and with 1-, 2-, 37- and 64-byte chunks, comparing
+   every book with the reference after every message. Each run must end with
+   0 mismatches and 0 drops, report exactly the chunk boundaries the file
+   layout implies, and leave the books written out by hand in the test; as a
+   negative control, the cent-denominated `LimitOrderBook` must drop adds and
+   merge the sub-penny levels on the same file
+
+`lob_parallel` runs one multi-instrument stream through one thread and
+through the sharded engine and requires every instrument's full-band depth,
+the processed-message count and the drop / bad-length counters to agree
+before it prints any scaling table. `spsc_stress` pushes sequence-checked
+messages through the ring.
+
+CI (`.github/workflows/ci.yml`) builds `lob_bench`, `lob_parallel` and
+`spsc_stress` single-TU with `-std=c++20 -O2 -Wall -Wextra -pthread` on
+ubuntu (g++-13, clang++-18) and Windows (MinGW g++), with an ASan+UBSan leg,
+and runs `lob_bench --quick`, `lob_parallel --quick` and `spsc_stress`; a TSan
+leg runs `spsc_stress`. `--quick` shrinks the benchmark sizes only: every
+check above runs, including check 7, so every leg except TSan replays the
+crafted file through the `lob_replay` code on every push. The workflow does
+not build the `lob_replay` or `lob_perf` binaries themselves; `build.ps1 -Run`
+runs `lob_replay --fixture` and `lob_replay --selftest` locally. The selftest
+replays a generated 40-symbol day of 1,500,044 messages through 4,103-byte
+chunks with the differential; 11,352 of its chunk boundaries fall inside a
+message ([`results/replay_selftest.log`](results/replay_selftest.log); the
+fixture's output is [`results/replay_fixture.log`](results/replay_fixture.log)).
+CI checks correctness, not speed: the messages/second a shared runner prints
+under `--quick` are not measurements.
+
+Guards make a bad run loud. A length prefix that disagrees with the per-type
+ITCH table is refused before any cast and counted (`bad_length`). The id map
+aborts instead of probing forever when full, the book checks pool <= idmap / 2
+at construction, and the SPSC ring checks that a message fits its slot. Those
+three are `LOB_ASSERT`, a branch to `std::abort()` that `-DNDEBUG` does *not*
+compile out, so they hold in the release builds measured here.
+
+## Layout
+
+```
+include/lob/common.hpp      byte-order shims, rdtsc/rdtscp, branch hints
+include/lob/order_pool.hpp  Order (32 B), slab OrderPool, flat OrderIdMap
+include/lob/book.hpp        PriceLevel, BookSide, LimitOrderBook (ladder only)
+                            and ExactOrderBook (per-book grid + exact overflow)
+include/lob/itch.hpp        zero-copy ITCH 5.0 dispatch, length table, FeedHandler
+include/lob/spsc.hpp        wait-free SPSC ring
+include/lob/engine.hpp      sharded multi-core engine (demux, rings, pinned workers)
+src/main.cpp                lob_bench: unit checks, differential fuzz, benchmarks,
+                            ExactOrderBook checks and fuzz, crafted-file replay
+src/parallel_main.cpp       lob_parallel: parallel-vs-sequential check, scaling
+src/spsc_stress.cpp         spsc_stress: sequence-checked ring stress (TSan target)
+src/replay_main.cpp         lob_replay: command line, --fixture, --selftest
+src/replay_run.hpp          the replay run: pre-scan, sizing, dispatch, differential
+src/replay_day.hpp          shared by the recorded-day tools: chunked reader,
+                            pre-scan, per-symbol sizing, timed loop, book digest
+src/replay_fixture.hpp      the crafted 65-message file and its expected books
+src/perf_main.cpp           lob_perf: single core, demux, presplit, latency build
+src/ref_market.hpp          naive whole-market reference model (own decoder)
+src/book_diff.hpp           full book comparison: levels, queues, BBO
+src/wire_gen.hpp            generated multi-symbol wire-unit ITCH stream (tests)
+tools/itch_count.cpp        independent recount of a BinaryFILE (no shared code)
+tools/perf_json.pl          builds results/perf_20190130.json from the logs
+tools/*.sh                  data manifest, official closes
+data/MANIFEST.md            the input file: source, sizes, hashes, commands
+results/                    console output of every run cited in this README
+```
 
 ## Build & run
 
-Three single-translation-unit binaries, no build system. Windows with
-MinGW-w64 g++ (`winget install BrechtSanders.WinLibs.POSIX.UCRT`;
+Six single-translation-unit binaries (two from one source), no build system.
+Windows with MinGW-w64 g++ (`winget install BrechtSanders.WinLibs.POSIX.UCRT`;
 `.\build.ps1 [-Run] [-Quick]` runs these same lines):
 
 ```powershell
@@ -114,9 +424,20 @@ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
     -I include src/parallel_main.cpp -o lob_parallel.exe
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
     -I include src/spsc_stress.cpp -o spsc_stress.exe
-./lob_bench.exe       # unit checks, differential fuzz, latency percentiles, single-core throughput
-./lob_parallel.exe    # parallel-vs-sequential verification, multi-core scaling tables
-./spsc_stress.exe     # 2M sequence-checked messages through the SPSC ring
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
+    -I include src/replay_main.cpp -o lob_replay.exe
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
+    -I include src/perf_main.cpp -o lob_perf.exe
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
+    -DLOB_PERF_LATENCY -I include src/perf_main.cpp -o lob_perf_latency.exe
+./lob_bench.exe       # checks 1-7, latency percentiles, single-core throughput
+./lob_parallel.exe    # parallel-vs-sequential verification, multi-core scaling
+./spsc_stress.exe     # sequence-checked messages through the SPSC ring
+./lob_replay.exe --fixture                             # crafted file, 1-byte chunks up
+./lob_replay.exe --selftest                            # generated day, 4 KB chunks
+./lob_replay.exe 01302019.NASDAQ_ITCH50 --differential # the recorded day
+./lob_perf.exe 01302019.NASDAQ_ITCH50                  # single-core throughput on the day
+./lob_perf_latency.exe 01302019.NASDAQ_ITCH50          # every message timed
 ```
 
 Linux with g++ >= 11 or clang++ >= 14 (`std::latch` needs libstdc++ 11+):
@@ -125,77 +446,60 @@ Linux with g++ >= 11 or clang++ >= 14 (`std::latch` needs libstdc++ 11+):
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/main.cpp          -o lob_bench
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/parallel_main.cpp -o lob_parallel
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/spsc_stress.cpp   -o spsc_stress
-./lob_bench && ./lob_parallel && ./spsc_stress
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/replay_main.cpp   -o lob_replay
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/perf_main.cpp     -o lob_perf
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -DLOB_PERF_LATENCY -I include src/perf_main.cpp -o lob_perf_latency
+./lob_bench && ./lob_parallel && ./spsc_stress && ./lob_replay --fixture && ./lob_replay --selftest
 ```
 
-`lob_bench` and `lob_parallel` accept `--quick` (the mode CI runs): every
-correctness check still runs, only the benchmark sizes shrink, and the
-numbers a `--quick` run prints are not measurements.
+`lob_bench` takes `--quick` (the mode CI runs: every check still runs, only
+the benchmark sizes shrink, and the numbers it prints are not measurements)
+and `--cpu N` (pin to logical CPU N on Windows; default 2, which on the 265H
+is an E-core). `lob_parallel` takes `--quick`.
 
-`lob_bench` self-verifies before benchmarking:
-1. deterministic unit checks (FIFO priority, BBO transitions, replace semantics)
-2. **differential fuzz**: 2M generated ITCH messages from a fixed seed
-   (`A`/`F`/`E`/`C`/`X`/`D`/`U`, all seven types present and counted in the
-   printed mix) replayed simultaneously into this book and a naive
-   `std::map` + `std::unordered_map` reference. The fast book reads the wire
-   bytes through the length-validated dispatch, so the parser is on trial too,
-   while the reference replays the generator's decoded op list. BBO is
-   compared after *every* one of the 2M messages, and every price level in the
-   whole 131072-tick band is audited against the reference every 50k messages
-   (40 full-band audits per run). A corrupt-length frame must be refused and
-   counted, never parsed. The reference replay is then timed next to the flat
-   book and the ratio printed as a reference-implementation comparison on that
-   stream
-3. per-op latency percentiles (`rdtscp`-serialized, timer overhead subtracted)
-4. end-to-end binary-stream throughput through the feed handler, with the
-   out-of-band-drop / bad-length / live-order counters (all zero drops on a
-   well-formed in-band stream)
+`lob_replay FILE` takes the decompressed BinaryFILE. Options:
+`--differential` (run the reference and compare at every checkpoint),
+`--checkpoint N` (default 5,000,000 messages), `--at HH:MM:SS,...` (extra
+checkpoints that also print the named books; default 12:00:00,16:00:00 ET),
+`--symbols A,B,...`, `--depth N`, `--chunk-mb N` (default 256),
+`--ladder-mb N` (default 1024), `--cpu N`. It exits non-zero unless every
+check passes. `--fixture` and `--selftest` are the two built-in tests above.
 
-`lob_parallel` runs the same multi-instrument stream through one thread and
-through the sharded engine and requires every instrument's full-band depth,
-the processed-message count and the drop / bad-length counters to agree
-before it prints any scaling table.
+`lob_perf FILE` takes the same file. `--mode single` (default) times the
+single-core loop; `--mode demux` and `--mode presplit` run the sharded
+configurations for each W in `--workers 1,2,4` (default); `--cpu N` pins the
+single-core thread (default: the first fast core after CPU 0), `--cpus a,b,...`
+gives the multi-core CPU order (main thread first; default: fast cores
+first, from the OS's CPU sets); `--chunk-mb N` and `--ladder-mb N` as for
+`lob_replay`. `lob_perf_latency FILE` takes `--cpu`, `--chunk-mb` and
+`--ladder-mb`. Both print the machine, power state, TSC calibration and a
+book digest per chunk, and exit non-zero unless every check passes.
 
 ## Reproducibility
 
-- Every figure in *Phase 5* above is printed by `lob_bench` (single-core,
-  `src/main.cpp`) or `lob_parallel` (demux and multi-channel scaling,
-  `src/parallel_main.cpp`), built with the `-O3 -march=native -DNDEBUG` lines
-  in *Build & run* and run without `--quick`, on the synthetic stream those
-  binaries generate in-process. No market data is read from disk, because none
-  is distributed here. The runs behind the figures are recorded in the commit
-  messages of `67d6b20` (first measurements: 13.8M single-core, 148M across
-  23 cores) and `554bbd0` (ranges over six repeated idle runs). No console log
-  is committed: build, run, and expect different absolute numbers.
-- `.github/workflows/ci.yml` builds all three binaries single-TU with
-  `-std=c++20 -O2 -Wall -Wextra -pthread` on ubuntu (g++-13, clang++-18) and
-  Windows (MinGW g++) and runs `lob_bench --quick`, `lob_parallel --quick` and
-  `spsc_stress`. An ASan+UBSan leg runs the same three, and a TSan leg runs
-  `spsc_stress`. CI verifies **correctness** (unit checks, differential fuzz,
-  parallel-vs-sequential depth equality, sanitizers, TSan) and **not
-  throughput**: the msgs/s a shared 4-vCPU runner prints under `--quick` are
-  not measurements and are not the numbers in this README.
-- Guards make a bad run loud. A length prefix that disagrees with the per-type
-  ITCH table is refused before any cast and counted (`bad_length`), and
-  out-of-band adds are counted (`dropped_out_of_band`). The id map aborts
-  instead of probing forever when full, the book checks pool <= idmap / 2 at
-  construction, and the SPSC ring checks that a message fits its slot. Those
-  three are `LOB_ASSERT`, a branch to `std::abort()` that `-DNDEBUG` does
-  *not* compile out, so they hold in the release builds benchmarked here. All
-  counters are printed at the end of every run, and CI requires the
-  bad-length count to be zero.
+[`data/MANIFEST.md`](data/MANIFEST.md) identifies the input (source URL,
+sizes, SHA-256, message counts by type) and gives the exact command behind
+every file in `results/`, and which commit each binary was built from. Every
+number in this README is in one of those files. The data itself is NASDAQ's
+and is not redistributed here.
 
 ## Notes & limits
 
-- One instrument per `LimitOrderBook` (standard sharding unit). Multi-symbol
-  support is a `stock_locate`-indexed book table in front of the handler.
-- Prices are integer cents inside a configurable band (default $0.01-$1310.72,
-  3 MB of ladder per side). Out-of-band adds are dropped and counted, as a
-  prod handler would route them to a slow path.
-- The book does not match crossing orders; it is a *reconstructor*, and crossings
-  are resolved by the venue and arrive as Execute messages, per ITCH semantics.
-- Latency outliers (the `max` column: tens to hundreds of microseconds on an
-  idle desktop, milliseconds on one doing other work) are OS preemption rather
-  than book work; the p99 sits orders of magnitude below them. On a tuned host
-  you'd pin to an isolated core (`isolcpus`), disable SMT on that core, and
-  use huge pages for the slab and ID map.
+- One instrument per book (the standard sharding unit). The multi-symbol
+  front is a `stock_locate`-indexed book table, as in `lob_replay` and the
+  parallel engine.
+- `LimitOrderBook`, the benchmark book, keeps integer cents inside a
+  configurable band (default $0.01-$1,310.72, 3 MB of ladder per side) and
+  drops and counts out-of-band adds. `ExactOrderBook`, the replay's book,
+  holds any u32 wire price exactly, routing what its ladder does not cover to
+  the overflow.
+- `lob_replay` sizes its books from a pre-scan of the same file, which suits
+  a historical replay. A live feed handler would size from the previous day
+  or a reserve, since it cannot read the day ahead.
+- The book does not match crossing orders; it is a *reconstructor*, and
+  crossings are resolved by the venue and arrive as Execute messages, per ITCH
+  semantics.
+- The latency maxima (milliseconds in the recorded-day runs) are OS
+  preemption rather than book work; the p99.9 sits three orders of magnitude
+  below them. On a tuned host you would pin to an isolated core (`isolcpus`),
+  keep SMT off on that core, and use huge pages for the slab and the id map.

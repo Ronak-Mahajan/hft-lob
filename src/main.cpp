@@ -11,23 +11,45 @@
 //    (Serialization inflates absolute numbers; the batched wall-clock
 //    average below is the fair throughput figure. Both are printed.)
 // 4. End-to-end throughput         - binary ITCH stream through FeedHandler.
+// 5. ExactOrderBook unit checks    - wire-unit grid, overflow below / above /
+//    between grid points, moves across the ladder boundary, sub-penny and
+//    past-int32 prices, the reciprocal division behind ladder_index.
+// 6. ExactOrderBook fuzz           - generated multi-symbol wire-unit stream
+//    (src/wire_gen.hpp) through ExactOrderBooks and the ref::Market model
+//    (src/ref_market.hpp); full depth and queue order audited periodically.
+// 7. Recorded-day replay path       - a crafted 65-message ITCH file through
+//    the lob_replay run (src/replay_fixture.hpp): sub-penny prices, prices
+//    far outside every ladder, replaces across the ladder boundary, chunks
+//    from 1 byte up, the reference compared after every message.
 //
-// Usage:  lob_bench [--quick]
+// Usage:  lob_bench [--quick] [--cpu N]
 //   --quick  CI mode: smaller message counts (fuzz 250k, latency 100k,
-//            throughput 1M) so the whole run finishes in seconds. Every
-//            correctness check still runs; only the benchmark sizes shrink,
-//            and the numbers it prints are not the README's measurements.
+//            throughput 1M, exact fuzz 200k) so the whole run finishes in
+//            seconds. Every correctness check still runs; only the sizes
+//            shrink, and the numbers it prints are not the README's
+//            measurements.
+//   --cpu N  pin the benchmark thread to logical CPU N (Windows builds;
+//            default 2).
 // ---------------------------------------------------------------------------
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <map>
+#include <memory>
+#include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "lob/book.hpp"
 #include "lob/itch.hpp"
+
+#include "book_diff.hpp"
+#include "ref_market.hpp"
+#include "replay_fixture.hpp"
+#include "wire_gen.hpp"
 
 #ifdef _WIN32
   #define WIN32_LEAN_AND_MEAN
@@ -68,11 +90,13 @@ static int g_failures = 0;
         }                                                                  \
     } while (0)
 
-static void pin_and_boost() {
+static void pin_and_boost(unsigned cpu) {
 #ifdef _WIN32
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
-    SetThreadAffinityMask(GetCurrentThread(), DWORD_PTR{1} << 2);  // pin to core 2
+    if (cpu < 64) SetThreadAffinityMask(GetCurrentThread(), DWORD_PTR{1} << cpu);
+#else
+    (void)cpu;
 #endif
 }
 
@@ -430,7 +454,7 @@ static void differential_fuzz(size_t n_msgs) {
         if (a.bid_price != b.bid_price || a.bid_qty != b.bid_qty ||
             a.ask_price != b.ask_price || a.ask_qty != b.ask_qty) {
             if (++mismatches < 5)
-                std::printf("  BBO mismatch at msg %zu: fast %d/%llu %d/%llu  ref %d/%llu %d/%llu\n",
+                std::printf("  BBO mismatch at msg %zu: fast %u/%llu %u/%llu  ref %u/%llu %u/%llu\n",
                             i, a.bid_price, (unsigned long long)a.bid_qty,
                             a.ask_price, (unsigned long long)a.ask_qty,
                             b.bid_price, (unsigned long long)b.bid_qty,
@@ -599,7 +623,7 @@ static void throughput_bench(size_t n_msgs) {
                 secs * 1e9 / static_cast<double>(done));
 
     BBO q = book.bbo();
-    std::printf("  final book: bid %d x %llu | ask %d x %llu\n",
+    std::printf("  final book: bid %u x %llu | ask %u x %llu\n",
                 q.bid_price, (unsigned long long)q.bid_qty,
                 q.ask_price, (unsigned long long)q.ask_qty);
     CHECK(done == gen.ops.size(), "every framed message consumed");
@@ -610,17 +634,241 @@ static void throughput_bench(size_t n_msgs) {
                 (unsigned long long)book.live_orders());
 }
 
+// ============================================================================
+// 5. ExactOrderBook unit checks
+// ============================================================================
+static void exact_book_checks() {
+    std::printf("[5] ExactOrderBook unit checks (wire units: ladder, overflow, "
+                "sub-penny and past-int32 prices)\n");
+    const int before = g_failures;
+    using Lvl = std::pair<uint64_t, uint32_t>;
+
+    // ladder_index divides by the tick with a precomputed reciprocal.
+    {
+        SplitMix64 rng(0x5EEDull);
+        const uint32_t divisors[] = {2u, 3u, 7u, 10u, 100u, 1000u, 10000u, 65536u,
+                                     99991u, 2147483659u, 4294967295u};
+        bool ok = true;
+        for (uint32_t d : divisors) {
+            const uint64_t M = ~uint64_t{0} / d + 1;
+            auto check = [&](uint32_t n) { if (mulhi64(M, n) != n / d) ok = false; };
+            const uint32_t top = (0xFFFFFFFFu / d) * d;
+            for (uint32_t n : {0u, 1u, d - 1, d, d + 1, top - 1, top, 0xFFFFFFFFu - 1, 0xFFFFFFFFu})
+                check(n);
+            for (int i = 0; i < 100'000; ++i) check(static_cast<uint32_t>(rng.next()));
+        }
+        CHECK(ok, "reciprocal division equals integer division");
+    }
+
+    // $100.00 .. $100.63 on a one-cent grid (100 wire units); overflow elsewhere.
+    ExactOrderBook b(BookParams{1'000'000, 100, 64, 1u << 10, 12});
+    CHECK(b.ladder_index(1'000'000) == 0 && b.ladder_index(1'006'300) == 63,
+          "first and last ladder ticks");
+    CHECK(b.ladder_index(1'006'400) == NIL && b.ladder_index(999'900) == NIL &&
+          b.ladder_index(1'000'050) == NIL && b.ladder_index(5) == NIL,
+          "one past the top, below the base, between grid points, far below");
+    b.add(1, Side::Bid, 1'000'100, 100);   // $100.01   ladder
+    b.add(2, Side::Bid,   999'900,  50);   // $99.99    below the ladder
+    b.add(3, Side::Bid, 1'007'000,  10);   // $100.70   above the ladder: best bid
+    b.add(4, Side::Bid, 1'000'150,  20);   // $100.015  between two grid points
+    b.add(5, Side::Ask, 1'008'000,  30);   // $100.80   above the ladder
+    b.add(6, Side::Ask, 1'006'300,  40);   // $100.63   last ladder tick: best ask
+    BBO q = b.bbo();
+    CHECK(q.bid_price == 1'007'000 && q.bid_qty == 10, "best bid comes from the overflow");
+    CHECK(q.ask_price == 1'006'300 && q.ask_qty == 40, "best ask comes from the ladder");
+    CHECK(b.overflow_adds() == 4 && b.live_orders() == 6, "four overflow adds, six live orders");
+    CHECK(b.level_at(Side::Bid, 1'000'150) == Lvl(20, 1), "a sub-penny price is its own level");
+    std::vector<Price> seen;
+    b.for_each_level(Side::Bid, [&](Price p, const PriceLevel&) { seen.push_back(p); });
+    CHECK((seen == std::vector<Price>{1'007'000, 1'000'150, 1'000'100, 999'900}),
+          "bid walk merges ladder and overflow by price");
+    seen.clear();
+    b.for_each_level(Side::Ask, [&](Price p, const PriceLevel&) { seen.push_back(p); });
+    CHECK((seen == std::vector<Price>{1'006'300, 1'008'000}),
+          "ask walk merges ladder and overflow by price");
+
+    b.execute(3, 4);                          // partial execution in the overflow
+    CHECK(b.bbo().bid_qty == 6, "partial execution in the overflow");
+    b.cancel(4, 5);                           // partial cancel between grid points
+    CHECK(b.level_at(Side::Bid, 1'000'150) == Lvl(15, 1), "partial cancel between grid points");
+    b.execute(3, 6);                          // full execution empties the best level
+    q = b.bbo();
+    CHECK(q.bid_price == 1'000'150 && q.bid_qty == 15, "best bid falls to the sub-penny level");
+    b.remove(4);                              // delete in the overflow
+    q = b.bbo();
+    CHECK(q.bid_price == 1'000'100 && q.bid_qty == 100, "best bid falls back to the ladder");
+    b.replace(1, 7, 1'009'900, 25);           // ladder -> overflow
+    q = b.bbo();
+    CHECK(q.bid_price == 1'009'900 && q.bid_qty == 25 && b.find_order(1) == nullptr &&
+          b.level_at(Side::Bid, 1'000'100) == Lvl(0, 0),
+          "replace moves an order from the ladder to the overflow");
+    b.replace(7, 8, 1'000'500, 25);           // overflow -> ladder
+    q = b.bbo();
+    CHECK(q.bid_price == 1'000'500 && b.find_order(8) != nullptr &&
+          b.find_order(8)->level_idx == 5 && b.level_at(Side::Bid, 1'009'900) == Lvl(0, 0),
+          "replace moves an order from the overflow to the ladder");
+    b.replace(5, 9, 1'000'700, 30);           // ask: overflow -> ladder, new best ask
+    q = b.bbo();
+    CHECK(q.ask_price == 1'000'700 && q.ask_qty == 30, "ask replace from the overflow to the ladder");
+    b.add(10, Side::Ask, 1'008'000, 5);       // three orders at one overflow price
+    b.add(11, Side::Ask, 1'008'000, 6);
+    b.add(12, Side::Ask, 1'008'000, 7);
+    CHECK(b.level_at(Side::Ask, 1'008'000) == Lvl(18, 3), "three orders at one overflow price");
+    b.remove(11);                             // middle of the queue
+    std::vector<uint64_t> ids;
+    b.for_each_level(Side::Ask, [&](Price p, const PriceLevel& L) {
+        if (p != 1'008'000) return;
+        for (uint32_t i = L.head; i != NIL; i = b.order_at(i).next) ids.push_back(b.order_at(i).id);
+    });
+    CHECK((ids == std::vector<uint64_t>{10, 12}), "overflow FIFO after a delete mid-queue");
+    b.execute(10, 5);
+    b.execute(12, 7);
+    CHECK(b.level_at(Side::Ask, 1'008'000) == Lvl(0, 0) && b.overflow_levels() == 1,
+          "an emptied overflow level is erased");
+    b.remove(424242);
+    CHECK(b.unknown_id() == 1 && b.dropped_out_of_band() == 0, "unknown id counted, nothing dropped");
+
+    // Tick of one wire unit: $0.5000 .. $0.5511, every sub-penny price a level.
+    ExactOrderBook s(BookParams{5'000, 1, 512, 1u << 8, 10});
+    s.add(1, Side::Bid, 5'001, 100);          // $0.5001
+    s.add(2, Side::Bid, 5'002, 100);          // $0.5002
+    s.add(3, Side::Ask, 5'009, 100);          // $0.5009
+    size_t n_bid_levels = 0;
+    s.for_each_level(Side::Bid, [&](Price, const PriceLevel&) { ++n_bid_levels; });
+    q = s.bbo();
+    CHECK(n_bid_levels == 2 && q.bid_price == 5'002 && q.ask_price == 5'009 &&
+          s.overflow_adds() == 0, "sub-penny prices are distinct ladder levels");
+    CHECK(itch::price_to_ticks(be32(5'001)) == itch::price_to_ticks(be32(5'002)),
+          "whole-cent ticks would merge the same two prices");
+
+    // Prices past the int32 range: $300,000.00 on the ladder, u32 max above it.
+    ExactOrderBook h(BookParams{2'999'990'000u, 100, 256, 1u << 6, 8});
+    h.add(1, Side::Ask, 3'000'000'000u, 1);   // ladder index 100
+    h.add(2, Side::Ask, 4'294'967'295u, 1);   // u32 maximum: overflow above
+    h.add(3, Side::Bid, 2'147'483'648u, 1);   // one past int32: overflow below
+    q = h.bbo();
+    CHECK(q.ask_price == 3'000'000'000u && q.bid_price == 2'147'483'648u &&
+          h.overflow_adds() == 2 && h.find_order(1)->level_idx == 100,
+          "prices past the int32 range stay exact");
+
+    // The ladder-only LimitOrderBook still drops out-of-band adds, and counts them.
+    LimitOrderBook lb(1, 100, 1u << 6, 8);
+    lb.add(1, Side::Bid, 500, 10);            // outside [1, 101)
+    lb.remove(1);                             // its later delete is an unknown id
+    CHECK(lb.dropped_out_of_band() == 1 && lb.unknown_id() == 1 && lb.live_orders() == 0,
+          "ladder-only book drops out-of-band adds and counts them");
+
+    std::printf("  %s\n\n", g_failures == before ? "all passed" : "FAILURES ABOVE");
+}
+
+// ============================================================================
+// 6. ExactOrderBook differential fuzz vs ref::Market
+// ============================================================================
+static void exact_book_fuzz(size_t n_msgs) {
+    // Ladders chosen so the generator's prices straddle every boundary:
+    // one-cent grid, sub-penny grid, $1 grid past int32, near the NASDAQ price
+    // cap, and a ladder starting at $0 on the highest stock_locate.
+    const std::vector<WireSymbol> syms = {
+        {1,     "EXA",  1'000'000,      100,    64},
+        {2,     "SUBP", 5'000,          1,      512},
+        {3,     "BIGT", 3'000'000'000u, 10'000, 100},
+        {777,   "HIGH", 1'999'990'000u, 100,    128},
+        {65535, "EDGE", 0,              100,    64},
+    };
+    std::printf("[6] ExactOrderBook differential fuzz: %zu generated wire-unit messages, "
+                "%zu symbols, vs ref::Market\n", n_msgs, syms.size());
+    WireGen gen(0xFACADEull, syms, 20'000);
+    gen.generate(n_msgs);
+
+    std::vector<std::unique_ptr<ExactOrderBook>> books(65536);
+    for (const WireSymbol& s : syms)
+        books[s.locate] = std::make_unique<ExactOrderBook>(
+            BookParams{s.base, s.tick, s.band, 1u << 16, 17});
+    ref::Market refm;
+
+    uint64_t msgs = 0, bad_length = 0, mismatches = 0, audits = 0;
+    DiffTotals tot;
+    const uint64_t every = std::max<uint64_t>(1, n_msgs / 40);
+    auto audit = [&] {
+        ++audits;
+        for (const WireSymbol& s : syms) {
+            std::string d = diff_book(*books[s.locate], refm, s.locate, tot);
+            if (!d.empty() && ++mismatches <= 5)
+                std::printf("  mismatch after message %llu, %s: %s\n",
+                            (unsigned long long)msgs, s.name.c_str(), d.c_str());
+        }
+    };
+    const uint8_t* p   = gen.bytes.data();
+    const uint8_t* end = p + gen.bytes.size();
+    while (p + 2 <= end) {
+        uint16_t len = static_cast<uint16_t>((p[0] << 8) | p[1]);
+        const uint8_t* m = p + 2;
+        if (static_cast<size_t>(end - m) < len) break;
+        if (len >= 3) {
+            uint16_t loc = static_cast<uint16_t>((m[1] << 8) | m[2]);
+            if (books[loc]) itch::dispatch_checked<itch::WireUnits>(*books[loc], m, len, bad_length);
+        }
+        refm.on_message(m, len);
+        p += 2 + len;
+        if (++msgs % every == 0) audit();
+    }
+    audit();
+
+    uint64_t ovf = 0, dropped = 0, unknown = 0, live = 0;
+    for (const WireSymbol& s : syms) {
+        ovf     += books[s.locate]->overflow_adds();
+        dropped += books[s.locate]->dropped_out_of_band();
+        unknown += books[s.locate]->unknown_id();
+        live    += books[s.locate]->live_orders();
+    }
+    const ref::Counters& rc = refm.counters();
+    const uint64_t adds = rc.seen['A'] + rc.seen['F'] + rc.seen['U'];
+    CHECK(mismatches == 0, "ExactOrderBook matches ref::Market");
+    CHECK(bad_length == 0 && rc.bad_length == 0, "no bad-length messages in a well-formed stream");
+    CHECK(dropped == 0 && unknown == 0 && rc.unknown_ref == 0, "nothing dropped, no unknown ids");
+    CHECK(ovf > adds / 10 && ovf < adds, "the stream exercises both the ladder and the overflow");
+    std::printf("  %llu messages, %llu audits (%llu levels, %llu orders compared in queue order), "
+                "%llu mismatches - %s\n",
+                (unsigned long long)msgs, (unsigned long long)audits,
+                (unsigned long long)tot.levels, (unsigned long long)tot.orders,
+                (unsigned long long)mismatches, mismatches == 0 ? "PASS" : "FAIL");
+    std::printf("  counters: overflow adds %llu of %llu | dropped %llu | unknown id %llu | "
+                "bad-length %llu | live orders %llu\n\n",
+                (unsigned long long)ovf, (unsigned long long)adds, (unsigned long long)dropped,
+                (unsigned long long)unknown, (unsigned long long)bad_length,
+                (unsigned long long)live);
+}
+
+// ============================================================================
+// 7. The recorded-day replay path on a crafted file
+// ============================================================================
+// The same test `lob_replay --fixture` runs (src/replay_fixture.hpp): the
+// lob_replay run over a 65-message file built to contain sub-penny prices,
+// prices far outside every ladder and replaces across the ladder boundary,
+// read in chunks from 1 byte up, with the reference compared after every
+// message and the final books checked against levels written out by hand.
+// Its size does not depend on --quick.
+static void replay_fixture() {
+    std::printf("[7] Recorded-day replay path on a crafted ITCH file (lob_replay --fixture)\n");
+    const int rc = fixture::run(/*verbose=*/false, "lob_bench_fixture.itch", "lob_bench [7]");
+    CHECK(rc == 0, "crafted-file replay");
+    std::printf("\n");
+}
+
 int main(int argc, char** argv) {
     bool quick = false;
+    unsigned cpu = 2;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--quick") == 0) quick = true;
+        else if (std::strcmp(argv[i], "--cpu") == 0 && i + 1 < argc)
+            cpu = static_cast<unsigned>(std::strtoul(argv[++i], nullptr, 10));
         else {
-            std::printf("usage: %s [--quick]\n", argv[0]);
+            std::printf("usage: %s [--quick] [--cpu N]\n", argv[0]);
             return 2;
         }
     }
 
-    pin_and_boost();
+    pin_and_boost(cpu);
     double cpn = cycles_per_ns();
     std::printf("=== L2 Limit Order Book - verification & benchmarks%s ===\n",
                 quick ? " (--quick: CI sizes, not a measurement)" : "");
@@ -631,6 +879,9 @@ int main(int argc, char** argv) {
     differential_fuzz(quick ? 250'000 : 2'000'000);
     latency_bench(cpn, quick ? 100'000 : 1'000'000);
     throughput_bench(quick ? 1'000'000 : 10'000'000);
+    exact_book_checks();
+    exact_book_fuzz(quick ? 200'000 : 2'000'000);
+    replay_fixture();
 
     if (g_failures) { std::printf("*** %d FAILURE(S) ***\n", g_failures); return 1; }
     std::printf("All verification passed.\n");

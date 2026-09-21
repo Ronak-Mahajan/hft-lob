@@ -1,0 +1,253 @@
+$ g++ --version | head -1
+g++.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r4) 16.1.0
+$ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static tools/itch_count.cpp -o itch_count   (no warnings)
+$ ./itch_count 01302019.NASDAQ_ITCH50   (run 2026-09-21 01:44:34 on Intel Core Ultra 7 265H, from the data directory)
+=== itch_count: independent recount of a NASDAQ ITCH 5.0 BinaryFILE ===
+file: 01302019.NASDAQ_ITCH50 | chunk 268,435,456 bytes | no code shared with include/lob or src
+
+[1] framing (2-byte big-endian length, then the message)
+  bytes read 11,245,883,092 | messages 368,366,634
+  length-prefix bytes 736,733,268 + message bytes 10,509,149,824 = 11,245,883,092
+  bytes left after the last whole message: 0 (file ends exactly on a message boundary)
+  zero-length messages 0 | length prefix differs from the ITCH 5.0 length for its type: 0
+  first timestamp 03:03:59.687 | last 20:05:00.000 | timestamps lower than the previous one: 0
+
+[2] messages by type byte
+     A   162,970,455     B           116     C       158,886     D   158,273,361
+     E     8,096,995     F     1,725,898     H         8,805     I     3,684,511
+     J            62     L       193,769     P     1,326,184     Q        17,430
+     R         8,714     S             6     U    27,222,746     V             1
+     X     4,669,874     Y         8,821
+  sum over types 368,366,634 (equals messages: yes)
+  adds A + F + U (the add half of a replace): 191,919,099
+
+[3] stock_locate values
+  'R' messages 8,714 for 8,713 distinct locates
+  distinct locates in 'A' 8,669 | in 'F' 8,694 | in 'A' or 'F' 8,695 | in any order message (A F E C X D U) 8,695
+
+[4] crosses for the named symbols (Cross Trade 'Q': O opening, C closing, H halt/IPO, I intraday)
+  AAPL   cross O price     163.2200 shares      770,817 at 09:30:00.300423116
+  AAPL   cross C price     165.2500 shares    2,340,937 at 16:00:00.563528211
+  AAPL   last closing NOII before the cross, 15:59:59.037154233: paired 2,349,783 | imbalance 14,105 B | reference 165.2400 near 165.2500 far 165.2500
+  AAPL   no non-printable 'C' executions between 16:00:00 and 16:01:00
+  AAPL   order messages 16:00:00.000 to the closing cross: A 30 msgs/3,102 sh D 351 msgs/0 sh F 2 msgs/200 sh
+  AAPL   book when the closing cross was published: bid 165.2400 x 1,800 / ask 165.2700 x 17
+  MSFT   cross O price     104.6200 shares      500,581 at 09:30:00.148388129
+  MSFT   cross C price     106.3800 shares    2,606,642 at 16:00:00.531503164
+  MSFT   last closing NOII before the cross, 15:59:59.071660275: paired 2,606,642 | imbalance 0 N | reference 106.3400 near 106.3400 far 106.3400
+  MSFT   no non-printable 'C' executions between 16:00:00 and 16:01:00
+  MSFT   order messages 16:00:00.000 to the closing cross: A 24 msgs/2,646 sh D 220 msgs/0 sh F 3 msgs/300 sh U 1 msgs/100 sh
+  MSFT   book when the closing cross was published: bid 106.3000 x 7,640 / ask 106.3800 x 4,444
+  AMZN   cross O price    1623.0000 shares       42,456 at 09:30:00.752167493
+  AMZN   cross C price    1670.4300 shares      183,741 at 16:00:00.764615134
+  AMZN   last closing NOII before the cross, 16:00:00.265784886: paired 183,440 | imbalance 3,115 S | reference 1671.0000 near 1670.4300 far 1670.4300
+  AMZN   non-printable 'C' executions 16:00:00-16:01:00 at 1670.4300: 301 shares in 3 messages
+  AMZN   order messages 16:00:00.000 to the closing cross: A 32 msgs/431 sh C 3 msgs/301 sh D 652 msgs/0 sh F 4 msgs/400 sh
+  AMZN   book when the closing cross was published: bid 1670.4200 x 105 / ask 1671.1000 x 149
+  GOOGL  cross O price    1077.3600 shares       14,811 at 09:30:00.924708815
+  GOOGL  cross C price    1097.9900 shares      116,867 at 16:00:00.273828558
+  GOOGL  last closing NOII before the cross, 15:59:59.040425928: paired 116,867 | imbalance 0 N | reference 1098.0000 near 1098.0000 far 1098.0000
+  GOOGL  no non-printable 'C' executions between 16:00:00 and 16:01:00
+  GOOGL  order messages 16:00:00.000 to the closing cross: A 22 msgs/136 sh D 137 msgs/0 sh F 3 msgs/300 sh U 1 msgs/1 sh
+  GOOGL  book when the closing cross was published: bid 1097.5900 x 100 / ask 1098.0000 x 782
+  FB     cross O price     146.2200 shares      192,425 at 09:30:00.872327344
+  FB     cross C price     150.4200 shares    1,017,765 at 16:00:00.357470250
+  FB     last closing NOII before the cross, 15:59:59.086558718: paired 1,017,555 | imbalance 0 N | reference 150.4400 near 150.4400 far 150.4400
+  FB     no non-printable 'C' executions between 16:00:00 and 16:01:00
+  FB     order messages 16:00:00.000 to the closing cross: A 20 msgs/1,552 sh D 115 msgs/0 sh F 3 msgs/300 sh
+  FB     book when the closing cross was published: bid 150.3200 x 200 / ask 150.4200 x 5,718
+  INTC   cross O price      46.6900 shares      353,481 at 09:30:00.568580008
+  INTC   cross C price      47.5400 shares    2,204,287 at 16:00:00.003934708
+  INTC   last closing NOII before the cross, 15:59:59.090979889: paired 2,204,287 | imbalance 0 N | reference 47.5300 near 47.5300 far 47.5300
+  INTC   no non-printable 'C' executions between 16:00:00 and 16:01:00
+  INTC   order messages 16:00:00.000 to the closing cross: D 7 msgs/0 sh
+  INTC   book when the closing cross was published: bid 47.5300 x 400 / ask 47.5500 x 64,183
+  CSCO   cross O price      45.9400 shares      348,306 at 09:30:00.850442862
+  CSCO   cross C price      46.7100 shares    1,937,262 at 16:00:00.414989449
+  CSCO   last closing NOII before the cross, 15:59:59.210364504: paired 1,937,262 | imbalance 0 N | reference 46.7100 near 46.7100 far 46.7100
+  CSCO   no non-printable 'C' executions between 16:00:00 and 16:01:00
+  CSCO   order messages 16:00:00.000 to the closing cross: A 3 msgs/1,510 sh D 135 msgs/0 sh F 3 msgs/300 sh
+  CSCO   book when the closing cross was published: bid 46.7000 x 7,300 / ask 46.7100 x 400
+  NVDA   cross O price     134.8000 shares      258,932 at 09:30:00.880781810
+  NVDA   cross C price     137.3900 shares      335,421 at 16:00:00.591199113
+  NVDA   last closing NOII before the cross, 15:59:59.048266546: paired 335,421 | imbalance 0 N | reference 137.3200 near 137.3200 far 137.3200
+  NVDA   no non-printable 'C' executions between 16:00:00 and 16:01:00
+  NVDA   order messages 16:00:00.000 to the closing cross: A 16 msgs/1,361 sh D 214 msgs/0 sh F 2 msgs/200 sh U 1 msgs/100 sh
+  NVDA   book when the closing cross was published: bid 137.3900 x 500 / ask 137.4600 x 7,000
+  TSLA   cross O price     300.4500 shares       40,304 at 09:30:00.619358544
+  TSLA   cross C price     308.7700 shares       74,672 at 16:00:00.366177912
+  TSLA   last closing NOII before the cross, 15:59:59.172376484: paired 74,672 | imbalance 0 N | reference 308.9000 near 308.9000 far 308.9000
+  TSLA   non-printable 'C' executions 16:00:00-16:01:00 at 308.7700: 396 shares in 1 messages
+  TSLA   order messages 16:00:00.000 to the closing cross: A 26 msgs/5,358 sh C 1 msgs/396 sh D 78 msgs/0 sh E 3 msgs/101 sh
+  TSLA   book when the closing cross was published: bid 308.7600 x 309 / ask 308.7700 x 1,604
+  NFLX   cross O price     332.5000 shares       50,682 at 09:30:00.866770247
+  NFLX   cross C price     340.6600 shares      298,927 at 16:00:00.617142824
+  NFLX   last closing NOII before the cross, 15:59:59.064710666: paired 298,927 | imbalance 0 N | reference 340.5900 near 340.5900 far 340.5900
+  NFLX   no non-printable 'C' executions between 16:00:00 and 16:01:00
+  NFLX   order messages 16:00:00.000 to the closing cross: A 15 msgs/1,174 sh D 182 msgs/0 sh F 2 msgs/200 sh U 1 msgs/100 sh
+  NFLX   book when the closing cross was published: bid 340.5200 x 50 / ask 340.6600 x 529
+  BKNG   cross O price    1825.3300 shares        2,222 at 09:30:00.291795861
+  BKNG   cross C price    1818.7000 shares       19,741 at 16:00:00.613954806
+  BKNG   last closing NOII before the cross, 15:59:59.075186440: paired 19,741 | imbalance 0 N | reference 1818.7000 near 1818.7000 far 1818.7000
+  BKNG   no non-printable 'C' executions between 16:00:00 and 16:01:00
+  BKNG   order messages 16:00:00.000 to the closing cross: A 2 msgs/33 sh D 42 msgs/0 sh U 1 msgs/100 sh
+  BKNG   book when the closing cross was published: bid 1818.5600 x 700 / ask 1818.7000 x 198
+  WFT    cross O price       0.0000 shares            0 at 09:30:00.560522219
+  WFT    cross C price       0.0000 shares            0 at 16:00:00.427536611
+  WFT    last closing NOII before the cross, 15:59:59.049134664: paired 0 | imbalance 0 O | reference 0.0000 near 0.0000 far 0.0000
+  WFT    no non-printable 'C' executions between 16:00:00 and 16:01:00
+  WFT    order messages 16:00:00.000 to the closing cross: D 14 msgs/0 sh
+  WFT    book when the closing cross was published: bid 0.6347 x 3,800 / ask 0.6453 x 2,400
+
+[5] independent books for the named symbols (0 orders tracked at end, unknown refs 0)
+  independent books at 12:00:00.000 ET (state after message 151,453,346, top 5 levels):
+  AAPL   resting 39,587 | levels bid 2711 ask 2624
+         bid     162.3000        101 (   2)   | ask     162.3100        400 (   3)
+         bid     162.2900        174 (   2)   | ask     162.3200        705 (   5)
+         bid     162.2800        900 (   5)   | ask     162.3300        500 (   1)
+         bid     162.2700        912 (   6)   | ask     162.3400      1,200 (   2)
+         bid     162.2600        704 (   5)   | ask     162.3500      1,420 (   4)
+  MSFT   resting 19,134 | levels bid 1581 ask 1135
+         bid     105.4700        700 (   7)   | ask     105.4800        400 (   4)
+         bid     105.4600        993 (   7)   | ask     105.4900      1,212 (  10)
+         bid     105.4500        754 (   6)   | ask     105.5000      9,544 (  49)
+         bid     105.4400        919 (  10)   | ask     105.5100        300 (   3)
+         bid     105.4300      1,319 (  10)   | ask     105.5200        739 (   8)
+  AMZN   resting 34,678 | levels bid 2795 ask 2589
+         bid    1647.0600          3 (   1)   | ask    1647.4500         10 (   1)
+         bid    1647.0200        115 (   2)   | ask    1647.4600         11 (   2)
+         bid    1647.0000         72 (   3)   | ask    1647.6000        121 (   2)
+         bid    1646.9100          3 (   1)   | ask    1647.6400        100 (   1)
+         bid    1646.9000          1 (   1)   | ask    1647.6800          1 (   1)
+  GOOGL  resting 7,783 | levels bid 1143 ask 887
+         bid    1080.9300        100 (   1)   | ask    1081.5600          1 (   1)
+         bid    1080.8100         20 (   1)   | ask    1081.5900        150 (   1)
+         bid    1080.7800        100 (   1)   | ask    1081.6700          2 (   1)
+         bid    1080.6900         44 (   1)   | ask    1081.6800          1 (   1)
+         bid    1080.6600          1 (   1)   | ask    1081.7300        100 (   1)
+  FB     resting 19,073 | levels bid 1409 ask 2040
+         bid     147.1500        100 (   1)   | ask     147.1800        100 (   1)
+         bid     147.1400        905 (   2)   | ask     147.1900        500 (   1)
+         bid     147.1300        710 (   4)   | ask     147.2000        635 (   4)
+         bid     147.1200      1,360 (   8)   | ask     147.2100        200 (   2)
+         bid     147.1100      1,042 (  10)   | ask     147.2200        624 (   5)
+  INTC   resting 10,616 | levels bid 827 ask 865
+         bid      46.7700      1,335 (   8)   | ask      46.7800      2,001 (  13)
+         bid      46.7600      4,129 (  21)   | ask      46.7900      3,425 (  12)
+         bid      46.7500      3,900 (  17)   | ask      46.8000    147,603 (  38)
+         bid      46.7400      3,145 (  18)   | ask      46.8100      3,850 (  13)
+         bid      46.7300      4,579 (  17)   | ask      46.8200      4,269 (  15)
+  CSCO   resting 6,883 | levels bid 799 ask 537
+         bid      46.3200      5,468 (  14)   | ask      46.3300      1,200 (   7)
+         bid      46.3100      3,939 (  15)   | ask      46.3400      5,549 (  23)
+         bid      46.3000      3,239 (  10)   | ask      46.3500      4,863 (  13)
+         bid      46.2900      6,531 (  18)   | ask      46.3600      7,339 (  10)
+         bid      46.2800      5,082 (  18)   | ask      46.3700      4,421 (  10)
+  NVDA   resting 16,453 | levels bid 1361 ask 1890
+         bid     134.0100          7 (   3)   | ask     134.0500        100 (   1)
+         bid     134.0000        543 (   5)   | ask     134.0600        100 (   1)
+         bid     133.9900        200 (   2)   | ask     134.0700        200 (   2)
+         bid     133.9800        200 (   2)   | ask     134.0800        100 (   1)
+         bid     133.9700        200 (   2)   | ask     134.0900        100 (   1)
+  TSLA   resting 16,601 | levels bid 1364 ask 1646
+         bid     300.1400        106 (   2)   | ask     300.2800         48 (   1)
+         bid     300.1300        100 (   1)   | ask     300.3000        251 (   2)
+         bid     300.1200        115 (   3)   | ask     300.3500        100 (   1)
+         bid     300.1100        200 (   2)   | ask     300.3700        100 (   1)
+         bid     300.1000        100 (   1)   | ask     300.3800        100 (   1)
+  NFLX   resting 13,106 | levels bid 1264 ask 1431
+         bid     331.7100        100 (   1)   | ask     331.9000        100 (   1)
+         bid     331.7000      1,000 (   1)   | ask     331.9500        100 (   1)
+         bid     331.6700         61 (   1)   | ask     331.9600        100 (   1)
+         bid     331.6100        100 (   1)   | ask     331.9700        100 (   1)
+         bid     331.6000        100 (   1)   | ask     331.9900        400 (   1)
+  BKNG   resting 1,092 | levels bid 246 ask 256
+         bid    1815.4400         95 (   1)   | ask    1817.5700        102 (   2)
+         bid    1814.5000         16 (   2)   | ask    1817.5800          5 (   2)
+         bid    1813.3100          5 (   1)   | ask    1817.5900          2 (   1)
+         bid    1812.4200         16 (   1)   | ask    1817.6000          2 (   1)
+         bid    1812.2400         16 (   1)   | ask    1817.8100        100 (   1)
+  WFT    resting 700 | levels bid 94 ask 143
+         bid       0.6196        600 (   3)   | ask       0.6199        700 (   3)
+         bid       0.6195        100 (   1)   | ask       0.6200        100 (   1)
+         bid       0.6193         35 (   1)   | ask       0.6204        100 (   1)
+         bid       0.6192        100 (   1)   | ask       0.6208        100 (   1)
+         bid       0.6185        100 (   1)   | ask       0.6211        100 (   1)
+  independent books at 16:00:00.000 ET (state after message 365,323,584, top 5 levels):
+  AAPL   resting 42,767 | levels bid 3053 ask 2602
+         bid     165.2400      1,800 (   1)   | ask     165.2700        217 (   3)
+         bid     165.2100        200 (   2)   | ask     165.2800      3,853 (   6)
+         bid     165.2000      1,900 (   2)   | ask     165.2900        100 (   1)
+         bid     165.1900      8,200 (   5)   | ask     165.3000        100 (   1)
+         bid     165.1800        190 (   2)   | ask     165.3100        103 (   2)
+  MSFT   resting 22,071 | levels bid 1726 ask 1190
+         bid     106.3000      7,640 (   5)   | ask     106.3800      4,444 (   3)
+         bid     106.2800      8,177 (   3)   | ask     106.3900     13,572 (   6)
+         bid     106.2700      3,650 (   2)   | ask     106.4000     10,928 (  19)
+         bid     106.2600      7,658 (   2)   | ask     106.4100      3,400 (   1)
+         bid     106.2500      6,130 (   5)   | ask     106.4200        844 (   4)
+  AMZN   resting 39,028 | levels bid 3143 ask 2756
+         bid    1670.9900        291 (   1)   | ask    1671.1000        149 (   1)
+         bid    1670.4300          5 (   1)   | ask    1671.1100         59 (   1)
+         bid    1670.4200        105 (   2)   | ask    1671.1400        100 (   1)
+         bid    1670.4100        300 (   3)   | ask    1671.2000         14 (   1)
+         bid    1670.4000        100 (   1)   | ask    1671.2300        300 (   2)
+  GOOGL  resting 8,760 | levels bid 1293 ask 951
+         bid    1097.5900        160 (   4)   | ask    1098.0000        782 (   3)
+         bid    1097.5300        200 (   1)   | ask    1098.0500        100 (   1)
+         bid    1097.5000        200 (   1)   | ask    1098.0800        305 (   1)
+         bid    1097.3900        100 (   1)   | ask    1098.1000        300 (   1)
+         bid    1097.3700        687 (   1)   | ask    1098.1100        700 (   1)
+  FB     resting 20,953 | levels bid 1593 ask 2090
+         bid     150.3200        200 (   1)   | ask     150.4200      6,018 (   4)
+         bid     150.3100        200 (   1)   | ask     150.4300        534 (   2)
+         bid     150.3000      8,238 (   8)   | ask     150.4400        142 (   2)
+         bid     150.2900      2,031 (   4)   | ask     150.4500      1,110 (   3)
+         bid     150.2800      5,718 (   6)   | ask     150.4600      8,830 (   3)
+  INTC   resting 11,703 | levels bid 923 ask 873
+         bid      47.5300        880 (   3)   | ask      47.5500     64,183 (  10)
+         bid      47.5200     26,161 (   7)   | ask      47.5600     36,988 (  16)
+         bid      47.5100     65,600 (  15)   | ask      47.5700     70,895 (  21)
+         bid      47.5000     26,400 (   5)   | ask      47.5800     32,800 (  11)
+         bid      47.4900     44,800 (  15)   | ask      47.5900     25,659 (   9)
+  CSCO   resting 7,750 | levels bid 851 ask 558
+         bid      46.7000     10,700 (   6)   | ask      46.7100        400 (   2)
+         bid      46.6900     39,548 (  10)   | ask      46.7200     49,819 (  17)
+         bid      46.6800     58,795 (  12)   | ask      46.7300     88,687 (  17)
+         bid      46.6700     20,300 (  10)   | ask      46.7400     32,300 (  10)
+         bid      46.6600     22,546 (   8)   | ask      46.7500     38,847 (  17)
+  NVDA   resting 18,553 | levels bid 1578 ask 1861
+         bid     137.4100        100 (   1)   | ask     137.4600      7,000 (   4)
+         bid     137.3900        600 (   2)   | ask     137.4700      9,596 (   6)
+         bid     137.3800        100 (   1)   | ask     137.4800      4,579 (   6)
+         bid     137.3700        100 (   1)   | ask     137.4900      5,300 (   5)
+         bid     137.3600      3,286 (   4)   | ask     137.5000      9,119 (  28)
+  TSLA   resting 18,236 | levels bid 1606 ask 1600
+         bid     308.7600        410 (   3)   | ask     308.7700      2,000 (   1)
+         bid     308.7500        430 (   2)   | ask     308.8900      1,000 (   1)
+         bid     308.7300        100 (   1)   | ask     308.9200      2,510 (   6)
+         bid     308.7100        100 (   1)   | ask     308.9300        600 (   1)
+         bid     308.7000      1,535 (   5)   | ask     308.9400      2,984 (   3)
+  NFLX   resting 14,070 | levels bid 1431 ask 1405
+         bid     340.5300        300 (   3)   | ask     340.6600        529 (   1)
+         bid     340.5200         50 (   1)   | ask     340.6700      3,200 (   5)
+         bid     340.5000      1,062 (   2)   | ask     340.6800      5,715 (   2)
+         bid     340.4800        200 (   1)   | ask     340.6900      1,500 (   1)
+         bid     340.4500        650 (   2)   | ask     340.7000      4,092 (   6)
+  BKNG   resting 1,333 | levels bid 306 ask 320
+         bid    1818.5600        700 (   4)   | ask    1818.7000        198 (   3)
+         bid    1818.4200        273 (   1)   | ask    1818.7700        100 (   1)
+         bid    1818.3300        306 (   1)   | ask    1819.0500        100 (   1)
+         bid    1818.1100        100 (   1)   | ask    1819.2800        200 (   1)
+         bid    1818.0600          1 (   1)   | ask    1819.3900        114 (   2)
+  WFT    resting 547 | levels bid 71 ask 112
+         bid       0.6347      3,800 (   1)   | ask       0.6453      2,400 (   1)
+         bid       0.6333        100 (   1)   | ask       0.6459      3,900 (   1)
+         bid       0.6300      1,019 (   3)   | ask       0.6550        750 (   1)
+         bid       0.6265         50 (   1)   | ask       0.6577        100 (   1)
+         bid       0.6218        300 (   3)   | ask       0.6580      3,500 (   1)
+
+  wall time 13.4 s
+
+RESULT: CLEAN
+exit status 0

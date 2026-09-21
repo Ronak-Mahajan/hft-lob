@@ -34,16 +34,21 @@ namespace lob {
 
 enum class Side : uint8_t { Bid = 0, Ask = 1 };
 
+// A price in the book's own units (see LimitOrderBook). Unsigned 32-bit
+// because that is the ITCH 5.0 price field: in wire units ($0.0001) it spans
+// $0 to $429,496.7295, which a signed 32-bit type would cut at $214,748.
+using Price = uint32_t;
+
 // --------------------------------------------------------------------------
 // Order - 32 bytes, POD.
 // --------------------------------------------------------------------------
 struct Order {
     uint64_t id;         // exchange order reference number
     uint32_t qty;        // remaining shares
-    int32_t  price;      // integer ticks
+    Price    price;      // exact price, in the book's units
     uint32_t prev;       // pool index of prior order at this level (NIL=head)
     uint32_t next;       // pool index of next order / free-list link
-    uint32_t level_idx;  // band index of owning PriceLevel (price - base)
+    uint32_t level_idx;  // ladder index of owning PriceLevel, or kOverflowLevel
     Side     side;
     uint8_t  _pad[3];
 };
