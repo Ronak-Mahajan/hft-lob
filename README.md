@@ -8,9 +8,15 @@ It replays NASDAQ's full historical ITCH 5.0 sample day for 2019-01-30
 (368,366,634 messages into 8,695 order books) with no order dropped and no
 price rounded. A deliberately naive reference model, run beside it over the
 whole day, matched every book at all 76 checkpoints, level by level and order
-by order: **zero mismatches** (*Recorded-day replay* below). That run is a
-correctness run; this README reports no latency or throughput figure measured
-on the recorded day.
+by order: **zero mismatches** (*Recorded-day replay* below).
+
+On that same day, on one P-core of a Core Ultra 7 265H laptop, it applies the
+full 368M messages at **8.85-9.06M messages/second** (median 112 ns/message,
+five runs), and timing every one of those messages individually gives
+**p50 183 ns, p99 1,082 ns** (*Recorded-day performance* below). Sharded by
+`stock_locate`, one demux thread feeding five workers reaches 52.5M
+messages/second. Every performance run rebuilt the same books as the
+differential run, checked by a digest of every book after each 256 MB chunk.
 
 The throughput figures in *Phase 5* come from a **synthetic** ITCH 5.0 feed
 generated in-process by the mock in `src/`: end-to-end single-core throughput
@@ -38,12 +44,19 @@ src/parallel_main.cpp       Phase 5: parallel-vs-sequential verification +
                             scaling benchmarks
 src/spsc_stress.cpp         Phase 5: sequence-checked SPSC ring stress (the
                             ThreadSanitizer target in CI)
-src/replay_main.cpp         recorded-day replay: chunked reader, pre-scan
-                            sizing, per-locate ExactOrderBooks, differential
+src/replay_main.cpp         recorded-day replay: per-locate ExactOrderBooks,
+                            differential against the reference
+src/replay_day.hpp          shared by the recorded-day tools: chunked reader,
+                            pre-scan sizing, timed loop, book digest
+src/perf_main.cpp           recorded-day performance: single core, demux and
+                            presplit multi-core, per-message latency build
 src/ref_market.hpp          naive whole-market reference model (own decoder)
 src/book_diff.hpp           full book comparison: levels, queues, BBO
 src/wire_gen.hpp            generated multi-symbol wire-unit ITCH stream (tests)
-results/                    replay console log and the input data manifest
+results/                    console logs of every recorded-day run, the
+                            input data manifest, perf_20190130.json
+tools/                      itch_count.cpp (independent recount of the day),
+                            perf_json.pl (builds the JSON from the logs)
 .github/workflows/ci.yml    g++ / clang++ / MinGW builds, ASan+UBSan and
                             TSan legs (correctness only, see Reproducibility)
 ```
@@ -125,10 +138,102 @@ The log also prints the books of AAPL, MSFT, AMZN, BKNG and WFT at 12:00 and
 closing cross: 165.25). BRK.A is not in this day's stock directory, so the
 file carries no book for it.
 
-Not measured here: per-message latency, and throughput on this data. The
-replay times only its dispatch loop over a chunk already in memory, never the
-file reads, but in a differential run the reference processes each segment
-between the timed ones, so the time that run prints is not a measurement.
+After every 256 MB chunk the replay also prints a digest of the full state of
+every book (each level's price, shares and order count, and each queue order
+by order; `books_digest()` in `src/replay_day.hpp`). The performance runs
+below print the same digests, which is how they are tied to this run.
+
+The dispatch time a differential run prints is not a measurement: the
+reference processes each segment between the timed ones and evicts the books
+from cache. The measurements are in the next section.
+
+## Recorded-day performance: 2019-01-30
+
+`lob_perf` (`src/perf_main.cpp`) builds the same books as `lob_replay` from
+the same pre-scan and streams the same file in 256 MB chunks. Setup for every
+figure here: Intel Core Ultra 7 265H laptop (6 P-cores, 8 E-cores, 2
+low-power E-cores, no SMT), on AC power, Windows 11 on the Balanced power
+plan, with a browser and other everyday applications open; g++ 16.1.0,
+`-O3 -march=native -DNDEBUG`, binaries built from commit `d17968a`. Each run
+pins its thread (logical CPU 1, a P-core, unless stated) and raises the
+process to high priority. Raw console output for every run is in `results/`,
+and [`results/perf_20190130.json`](results/perf_20190130.json) collects every
+number, generated from those logs by `tools/perf_json.pl`.
+
+**Single core, end to end.** Every message is framed, length-checked,
+routed to its `stock_locate` book and applied (`dispatch_segment()`, the loop
+`lob_replay` uses). Only that loop over a chunk already in memory is timed,
+and the 42 chunk times are summed; file reads, the pre-scan and the digests
+are outside the timed region. This build has no per-message instrumentation.
+
+| run | 1 | 2 | 3 | 4 | 5 |
+|---|---:|---:|---:|---:|---:|
+| M messages/s | 8.85 | 9.02 | 9.06 | 8.90 | 8.91 |
+| ns/message | 112.97 | 110.82 | 110.33 | 112.34 | 112.22 |
+
+Min / median / max: 8.85 / 8.91 / 9.06M messages/second. One run pinned to
+logical CPU 2, an E-core, measured 6.30M messages/second (158.6 ns/message).
+
+**Per-message latency.** A separate build, `lob_perf_latency`
+(`-DLOB_PERF_LATENCY`), times every one of the day's 368,366,634 messages on
+its own, with no sampling: `lfence; rdtsc`, the book lookup and
+`dispatch_checked`, then `rdtscp; lfence`, as in `lob_bench`'s microbench.
+The minimum of 100,000 empty timer pairs (38 cycles) is subtracted from every
+sample. Cycles go into an exact histogram per message type, and percentiles
+are nearest-rank. The TSC is invariant; CPUID reports 3.6864 GHz, and the
+tool measures it against `QueryPerformanceCounter`, in five 1 s windows and
+over the whole pass (3.686398 GHz in every run). Run 1, in nanoseconds:
+
+| type | messages | p50 | p90 | p99 | p99.9 | max |
+|---|---:|---:|---:|---:|---:|---:|
+| `A` add | 162,970,455 | 184 | 341 | 692 | 998 | 3,444,762 |
+| `F` add with MPID | 1,725,898 | 193 | 417 | 763 | 1,500 | 752,360 |
+| `E` execute | 8,096,995 | 185 | 614 | 1,271 | 1,638 | 612,511 |
+| `C` execute at price | 158,886 | 110 | 425 | 1,200 | 1,635 | 116,607 |
+| `X` partial cancel | 4,669,874 | 80 | 365 | 948 | 1,421 | 3,230,745 |
+| `D` delete | 158,273,361 | 177 | 591 | 1,227 | 1,601 | 2,930,690 |
+| `U` replace | 27,222,746 | 224 | 564 | 1,087 | 1,546 | 2,428,755 |
+| other (not applied) | 5,248,419 | 7 | 26 | 42 | 139 | 171,168 |
+| **all messages** | **368,366,634** | **183** | **469** | **1,082** | **1,516** | 3,444,762 |
+
+Run 3 agrees within 1% (all messages: p50 181, p99 1,072, p99.9 1,508). In
+run 2 the empty-timer calibration read 76 cycles instead of 38, which
+over-subtracts every sample; its log is committed and its p99 (1,073) and
+p99.9 (1,512) agree, but it is not used for the headline. Each sample is one
+message timed in isolation behind a serializing fence, so the mean (231 ns)
+is higher than the 112 ns/message of the throughput runs, where consecutive
+messages overlap. The maxima, in the milliseconds, are the thread being
+interrupted or preempted by the OS during that message.
+
+**Multi-core.** The books are sharded by `stock_locate % W`, as in
+`engine.hpp`. *Demux*: one thread reads each chunk and routes every message
+through W SPSC rings to W workers (`BasicParallelEngine<ExactOrderBook,
+WireUnits>`), timed from the first push of a chunk until every ring is
+drained. *Presplit*: each chunk is first split per shard outside the timed
+region, then W workers apply their own buffers in parallel, timed from the
+start signal until the last worker finishes; it measures the books without
+any demux. The main thread is on logical CPU 0; workers take CPUs 1, 10, 11,
+12 and 13 (P-cores), then 2 to 9 (E-cores). One run each, aggregate M
+messages/second:
+
+| W | 1 | 2 | 3 | 4 | 5 | 8 | 13 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| demux | 8.71 | 18.68 | 30.19 | 40.16 | **52.54** | 43.15 | 36.92 |
+| presplit | 8.81 | 19.14 | 31.26 | 42.14 | 58.64 | 64.76 | **99.80** |
+
+Beyond five workers, the demux configurations add E-cores and get slower;
+the busiest of 13 shards carries 1.24 times the mean load.
+
+**Same books in every run.** Each of the runs above (throughput, latency,
+both multi-core modes at every W) printed the book digest after each of the
+42 chunks, and every digest equals the one the differential run printed at
+the same point. Every run also ends with 0 bad-length messages, 0 dropped
+orders, 0 unknown order ids, and 196,611 adds in the overflow, as the pre-scan
+predicted.
+
+Not measured: memory use, the core clock during the runs (the TSC rate is
+constant; turbo state is not recorded), file-read time, and any other host
+or OS. The multi-core configurations ran once each.
 
 ## Phase 5: multi-core scale (single-writer shards, wait-free rings)
 
@@ -182,11 +287,12 @@ The second machine shows how much the host matters. On a Core Ultra 7 265H
 4.2-6.4M msgs/s single core, 10.5-15M through a demux with 8 workers, and
 40-54M aggregate across 15 pre-split channels. Those spans are repeated runs
 on a machine that was not idle, and the low end of each is what a loaded
-laptop gives you.
+laptop gives you. `lob_bench` pins itself to logical CPU 2, which on the 265H
+is an E-core.
 
 ## Build & run
 
-Four single-translation-unit binaries, no build system. Windows with
+Six single-translation-unit binaries (two from one source), no build system. Windows with
 MinGW-w64 g++ (`winget install BrechtSanders.WinLibs.POSIX.UCRT`;
 `.\build.ps1 [-Run] [-Quick]` runs these same lines):
 
@@ -199,11 +305,17 @@ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
     -I include src/spsc_stress.cpp -o spsc_stress.exe
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
     -I include src/replay_main.cpp -o lob_replay.exe
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
+    -I include src/perf_main.cpp -o lob_perf.exe
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
+    -DLOB_PERF_LATENCY -I include src/perf_main.cpp -o lob_perf_latency.exe
 ./lob_bench.exe       # unit checks, differential fuzz, latency percentiles, single-core throughput
 ./lob_parallel.exe    # parallel-vs-sequential verification, multi-core scaling tables
 ./spsc_stress.exe     # 2M sequence-checked messages through the SPSC ring
 ./lob_replay.exe --selftest                          # generated day, 4 KB chunks, differential
 ./lob_replay.exe 01302019.NASDAQ_ITCH50 --differential   # the recorded day (see results/)
+./lob_perf.exe 01302019.NASDAQ_ITCH50                    # single-core throughput on the day
+./lob_perf_latency.exe 01302019.NASDAQ_ITCH50            # every message timed
 ```
 
 Linux with g++ >= 11 or clang++ >= 14 (`std::latch` needs libstdc++ 11+):
@@ -213,6 +325,8 @@ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/parallel_main.cpp -o lob_parallel
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/spsc_stress.cpp   -o spsc_stress
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/replay_main.cpp   -o lob_replay
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -I include src/perf_main.cpp     -o lob_perf
+g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -DLOB_PERF_LATENCY -I include src/perf_main.cpp -o lob_perf_latency
 ./lob_bench && ./lob_parallel && ./spsc_stress && ./lob_replay --selftest
 ```
 
@@ -229,6 +343,16 @@ checkpoints that also print the named books; default 12:00:00,16:00:00 ET),
 check passes. `--selftest` writes a generated 40-symbol day and replays it
 with the differential through 4,103-byte chunks, so that messages and length
 prefixes straddle chunk boundaries thousands of times.
+
+`lob_perf FILE` takes the same file. `--mode single` (default) times the
+single-core loop; `--mode demux` and `--mode presplit` run the sharded
+configurations for each W in `--workers 1,2,4` (default); `--cpu N` pins the
+single-core thread (default: the first fast core after CPU 0), `--cpus a,b,...`
+gives the multi-core CPU order (main thread first; default: fast cores
+first, from the OS's CPU sets); `--chunk-mb N` and `--ladder-mb N` as for
+`lob_replay`. `lob_perf_latency FILE` takes `--cpu`, `--chunk-mb` and
+`--ladder-mb`. Both print the machine, power state, TSC calibration and a
+book digest per chunk, and exit non-zero unless every check passes.
 
 `lob_bench` runs, in order (a failed check makes it exit non-zero):
 1. deterministic unit checks (FIFO priority, BBO transitions, replace semantics)
@@ -276,7 +400,15 @@ before it prints any scaling table.
 - Every figure in *Recorded-day replay* is in
   `results/replay_20190130_differential.log`, the console output of
   `lob_replay 01302019.NASDAQ_ITCH50 --differential` built from this tree, and
-  the input's sizes and hashes are in `results/manifest_20190130.log`. The
+  the input's sizes and hashes are in `results/manifest_20190130.log`.
+  Every figure in *Recorded-day performance* is in a
+  `results/perf_20190130_run_*.log` file, the console output of `lob_perf` or
+  `lob_perf_latency` built from commit `d17968a` with the lines in
+  `results/perf_20190130_run_env.log`, which also records the power state
+  and the busiest processes before each run. `results/perf_20190130.json`
+  is produced from those logs by `perl tools/perf_json.pl results`, which
+  refuses to write it if any run failed its checks or printed a book digest
+  different from the differential run's. The
   data itself is NASDAQ's and is not redistributed here;
   `results/manifest_20190130.md` says where to get it and how to check a copy.
 - `.github/workflows/ci.yml` builds all three binaries single-TU with
@@ -288,7 +420,7 @@ before it prints any scaling table.
   throughput**: the msgs/s a shared 4-vCPU runner prints under `--quick` are
   not measurements and are not the numbers in this README. The `ExactOrderBook`
   checks and fuzz run in CI as part of `lob_bench --quick`; the workflow does
-  not yet build `lob_replay`, whose `--selftest` runs locally through
+  not yet build `lob_replay` or `lob_perf`; `lob_replay --selftest` runs locally through
   `build.ps1 -Run`.
 - Guards make a bad run loud. A length prefix that disagrees with the per-type
   ITCH table is refused before any cast and counted (`bad_length`), and
