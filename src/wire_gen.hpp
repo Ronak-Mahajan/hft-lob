@@ -85,7 +85,7 @@ private:
         p8(static_cast<uint8_t>(type));
         p16(locate);
         p16(0);
-        ts_ += 1 + below(1000);
+        ts_ += 1 + below(20'000'000);             // about 10 ms apart on average
         p48(ts_);
     }
 

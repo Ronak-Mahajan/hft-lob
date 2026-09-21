@@ -1,6 +1,7 @@
 # Build script: finds g++ (PATH first, then the WinGet WinLibs install) and
-# compiles all three binaries. Usage:  .\build.ps1 [-Run] [-Quick]
-#   -Run    run lob_bench.exe, lob_parallel.exe and spsc_stress.exe after building
+# compiles all four binaries. Usage:  .\build.ps1 [-Run] [-Quick]
+#   -Run    run lob_bench.exe, lob_parallel.exe, spsc_stress.exe and
+#           lob_replay.exe --selftest after building
 #   -Quick  pass --quick to the benchmarks (CI sizes; not a measurement)
 param([switch]$Run, [switch]$Quick)
 
@@ -29,6 +30,11 @@ Write-Host "built: $root\lob_parallel.exe"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "built: $root\spsc_stress.exe"
 
+# replay_main.cpp: recorded-day ITCH 5.0 replay into ExactOrderBooks, with the reference differential
+& $gxx @flags "$root\src\replay_main.cpp" -o "$root\lob_replay.exe"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "built: $root\lob_replay.exe"
+
 if ($Run) {
     $arg = @()                       # stays an array even with one element
     if ($Quick) { $arg += "--quick" }
@@ -37,5 +43,7 @@ if ($Run) {
     & "$root\lob_parallel.exe" @arg
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & "$root\spsc_stress.exe"
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & "$root\lob_replay.exe" --selftest
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
