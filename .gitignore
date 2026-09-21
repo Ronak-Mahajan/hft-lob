@@ -6,6 +6,8 @@
 /lob_parallel
 /spsc_stress
 /lob_replay
+/lob_perf
+/lob_perf_latency
 ci.log
 
 # Market data is never committed: results/*manifest* names the source files,

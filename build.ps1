@@ -1,5 +1,5 @@
 # Build script: finds g++ (PATH first, then the WinGet WinLibs install) and
-# compiles all four binaries. Usage:  .\build.ps1 [-Run] [-Quick]
+# compiles all six binaries. Usage:  .\build.ps1 [-Run] [-Quick]
 #   -Run    run lob_bench.exe, lob_parallel.exe, spsc_stress.exe and
 #           lob_replay.exe --selftest after building
 #   -Quick  pass --quick to the benchmarks (CI sizes; not a measurement)
@@ -34,6 +34,15 @@ Write-Host "built: $root\spsc_stress.exe"
 & $gxx @flags "$root\src\replay_main.cpp" -o "$root\lob_replay.exe"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "built: $root\lob_replay.exe"
+
+# perf_main.cpp: recorded-day throughput (single core and sharded); the
+# -DLOB_PERF_LATENCY build (lob_perf_latency) times every message instead
+& $gxx @flags "$root\src\perf_main.cpp" -o "$root\lob_perf.exe"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "built: $root\lob_perf.exe"
+& $gxx @flags -DLOB_PERF_LATENCY "$root\src\perf_main.cpp" -o "$root\lob_perf_latency.exe"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "built: $root\lob_perf_latency.exe"
 
 if ($Run) {
     $arg = @()                       # stays an array even with one element

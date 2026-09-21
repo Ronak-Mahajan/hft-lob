@@ -80,6 +80,13 @@ public:
         return true;
     }
 
+    // True once the consumer has taken every slot pushed so far. The
+    // consumer publishes head_ only after it has processed a batch, so this
+    // also means every pushed message has been handled. Producer side only.
+    bool drained() const {
+        return head_.load(std::memory_order_acquire) == ptail_;
+    }
+
     // ---- consumer side ----------------------------------------------------
     // Drain visible slots, invoking f(const MsgSlot&) on each. One head_
     // publication per BATCH, not per message - coherence traffic amortizes
