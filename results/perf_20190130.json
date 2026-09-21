@@ -1,0 +1,1023 @@
+{
+  "headline": {
+    "single_core_msgs_per_s_millions": {
+      "median": 8.91,
+      "min": 8.85,
+      "max": 9.06,
+      "runs": 5
+    },
+    "single_core_ns_per_msg_median": 112.22,
+    "per_message_latency_ns_all_messages": {
+      "run": "results/perf_20190130_run_latency_1.log",
+      "p50": 183,
+      "p90": 469,
+      "p99": 1082,
+      "p99.9": 1516,
+      "max": 3444762
+    },
+    "multi_core_best_demux": {
+      "workers": 5,
+      "aggregate_msgs_per_s_millions": 52.54
+    },
+    "multi_core_best_presplit": {
+      "workers": 13,
+      "aggregate_msgs_per_s_millions": 99.80
+    },
+    "books_identical_to_differential_run": "yes, every run, at every chunk boundary"
+  },
+  "data": {
+    "file": "01302019.NASDAQ_ITCH50 (decompressed NASDAQ TotalView-ITCH 5.0 BinaryFILE)",
+    "date": "2019-01-30",
+    "source": "https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/",
+    "bytes": 11245883092,
+    "sha256": "1d0972ffc25b35902ccc3f9069aae517da56903d5795f872902b8697315f30c3",
+    "messages": 368366634,
+    "manifest": "results/manifest_20190130.md"
+  },
+  "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 7 265H",
+    "logical_processors": 16,
+    "cores": "16 cores, no SMT: 6 P-cores, 8 E-cores, 2 low-power E-cores",
+    "core_types": "from GetSystemCpuSetInformation: efficiency class 1 (P-cores) on logical CPUs 0, 1, 10-13; class 0 on 2-9 (E-cores) and 14-15 (low-power E-cores, separate last-level cache)",
+    "os": "Windows 10.0 build 26200 (Windows 11)",
+    "power": "AC line online | battery 100% | battery saver off",
+    "power_plan": "Balanced (powercfg /getactivescheme, recorded before every run in perf_20190130_run_env.log)",
+    "machine_state": "laptop with the owner's usual applications open (browser, music player); per-process CPU use in the 5 s before each run is in perf_20190130_run_env.log"
+  },
+  "build": {
+    "compiler": "g++ 16.1.0",
+    "flags": "-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include",
+    "latency_build_flags": "-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY",
+    "git_commit": "d17968aa889b4492ddad62285739576a3bfa8dcd",
+    "binaries": "lob_perf (src/perf_main.cpp) for throughput and multi-core; lob_perf_latency (the same source with -DLOB_PERF_LATENCY) for per-message latency; lob_replay (src/replay_main.cpp) for the differential run"
+  },
+  "tsc": {
+    "invariant": "yes",
+    "cpuid_15h_nominal_ghz": 3.686400,
+    "method": "rdtsc against std::chrono::steady_clock (QueryPerformanceCounter): five 1 s busy windows before each pass, and again over the whole timed pass; latency cycles are converted with the whole-pass value printed in the same log",
+    "measured_ghz_per_run": {
+      "perf_20190130_run_throughput_1.log": {
+        "windows": [3.686443, 3.686398, 3.686398, 3.686397, 3.686398],
+        "median": 3.686398,
+        "whole_pass": 3.686398
+      },
+      "perf_20190130_run_throughput_2.log": {
+        "windows": [3.686407, 3.686398, 3.686398, 3.686398, 3.686398],
+        "median": 3.686398,
+        "whole_pass": 3.686398
+      },
+      "perf_20190130_run_throughput_3.log": {
+        "windows": [3.686408, 3.686398, 3.686397, 3.686398, 3.686397],
+        "median": 3.686398,
+        "whole_pass": 3.686398
+      },
+      "perf_20190130_run_throughput_4.log": {
+        "windows": [3.686422, 3.686398, 3.686398, 3.686397, 3.686398],
+        "median": 3.686398,
+        "whole_pass": 3.686398
+      },
+      "perf_20190130_run_throughput_5.log": {
+        "windows": [3.686406, 3.686398, 3.686398, 3.686398, 3.686397],
+        "median": 3.686398,
+        "whole_pass": 3.686398
+      },
+      "perf_20190130_run_throughput_ecore.log": {
+        "windows": [3.686422, 3.686398, 3.686398, 3.686398, 3.686400],
+        "median": 3.686398,
+        "whole_pass": 3.686398
+      },
+      "perf_20190130_run_latency_1.log": {
+        "windows": [3.686404, 3.686398, 3.686398, 3.686398, 3.686398],
+        "median": 3.686398,
+        "whole_pass": 3.686398
+      },
+      "perf_20190130_run_latency_2.log": {
+        "windows": [3.686415, 3.686398, 3.686398, 3.686398, 3.686398],
+        "median": 3.686398,
+        "whole_pass": 3.686398
+      },
+      "perf_20190130_run_latency_3.log": {
+        "windows": [3.686405, 3.686397, 3.686398, 3.686398, 3.686397],
+        "median": 3.686398,
+        "whole_pass": 3.686398
+      }
+    }
+  },
+  "correctness": {
+    "note": "every run below printed a digest of every book's full state (levels and queue order) after each of the 42 chunks; all of them equal the digests of the differential run, which compared every book against the reference model",
+    "differential_log": "results/replay_20190130_differential.log",
+    "differential_checkpoints": 76,
+    "differential_mismatches": 0,
+    "digest_chain": "17b49d11d49913b3",
+    "runs_matching_every_chunk_digest": ["results/perf_20190130_run_throughput_1.log", "results/perf_20190130_run_throughput_2.log", "results/perf_20190130_run_throughput_3.log", "results/perf_20190130_run_throughput_4.log", "results/perf_20190130_run_throughput_5.log", "results/perf_20190130_run_throughput_ecore.log", "results/perf_20190130_run_latency_1.log", "results/perf_20190130_run_latency_2.log", "results/perf_20190130_run_latency_3.log", "results/perf_20190130_run_multicore_demux.log", "results/perf_20190130_run_multicore_presplit.log"],
+    "dropped_out_of_band": 0,
+    "unknown_order_ids": 0,
+    "bad_length": 0
+  },
+  "single_core_throughput": {
+    "what": "end to end over the full day: parse, validate and apply every message (dispatch_segment: frame, look up the stock_locate book, itch::dispatch_checked<WireUnits>); only that loop over a chunk already in memory is timed, summed over the 42 chunks of 256 MB; file reads, the pre-scan and the per-chunk digests are not timed",
+    "cpu": "logical CPU 1 (P-core), thread pinned, process HIGH_PRIORITY_CLASS",
+    "runs": [
+      {
+        "log": "results/perf_20190130_run_throughput_1.log",
+        "timed_s": 41.615,
+        "msgs_per_s_millions": 8.85,
+        "ns_per_msg": 112.97,
+        "tsc_cycles_per_msg": 416.46
+      },
+      {
+        "log": "results/perf_20190130_run_throughput_2.log",
+        "timed_s": 40.824,
+        "msgs_per_s_millions": 9.02,
+        "ns_per_msg": 110.82,
+        "tsc_cycles_per_msg": 408.54
+      },
+      {
+        "log": "results/perf_20190130_run_throughput_3.log",
+        "timed_s": 40.643,
+        "msgs_per_s_millions": 9.06,
+        "ns_per_msg": 110.33,
+        "tsc_cycles_per_msg": 406.73
+      },
+      {
+        "log": "results/perf_20190130_run_throughput_4.log",
+        "timed_s": 41.381,
+        "msgs_per_s_millions": 8.90,
+        "ns_per_msg": 112.34,
+        "tsc_cycles_per_msg": 414.11
+      },
+      {
+        "log": "results/perf_20190130_run_throughput_5.log",
+        "timed_s": 41.339,
+        "msgs_per_s_millions": 8.91,
+        "ns_per_msg": 112.22,
+        "tsc_cycles_per_msg": 413.69
+      }
+    ],
+    "msgs_per_s_millions": {
+      "min": 8.85,
+      "median": 8.91,
+      "max": 9.06
+    },
+    "ns_per_msg": {
+      "min": 110.33,
+      "median": 112.22,
+      "max": 112.97
+    },
+    "e_core_comparison": {
+      "log": "results/perf_20190130_run_throughput_ecore.log",
+      "cpu": "logical CPU 2 (E-core)",
+      "msgs_per_s_millions": 6.30,
+      "ns_per_msg": 158.61,
+      "runs": 1
+    }
+  },
+  "per_message_latency": {
+    "what": "every message of the day timed individually (no sampling): lfence; rdtsc; book lookup + itch::dispatch_checked<WireUnits>; rdtscp; lfence. The minimum of 100,000 empty timer pairs is subtracted from each sample (clamped at 0). Exact histogram, nearest-rank percentiles. Serialized timing measures one message in isolation; it is not the throughput figure",
+    "cpu": "logical CPU 1 (P-core), thread pinned, process HIGH_PRIORITY_CLASS",
+    "headline_run": "results/perf_20190130_run_latency_1.log",
+    "headline_rule": "the first run in which fewer than 1 in 10,000 samples were clamped to 0 by the overhead subtraction; a run whose empty-timer calibration read high (run 2: minimum 76 cycles against 38 in runs 1 and 3) subtracts too much from every sample and is reported but not used as the headline",
+    "valid_runs": ["results/perf_20190130_run_latency_1.log", "results/perf_20190130_run_latency_3.log"],
+    "runs": [
+      {
+        "log": "results/perf_20190130_run_latency_1.log",
+        "tsc_ghz": 3.686398,
+        "timer_overhead_cycles": {
+          "min_subtracted": 38,
+          "p50": 42,
+          "p99": 46
+        },
+        "samples_clamped_to_zero": 62,
+        "cycles": {
+          "A": {
+            "messages": 162970455,
+            "mean": 739.4,
+            "min": 18,
+            "p50": 678,
+            "p90": 1258,
+            "p99": 2552,
+            "p99.9": 3680,
+            "p99.99": 23454,
+            "max": 12698764
+          },
+          "F": {
+            "messages": 1725898,
+            "mean": 828.1,
+            "min": 22,
+            "p50": 710,
+            "p90": 1538,
+            "p99": 2812,
+            "p99.9": 5528,
+            "p99.99": 25542,
+            "max": 2773498
+          },
+          "E": {
+            "messages": 8096995,
+            "mean": 992.4,
+            "min": 18,
+            "p50": 682,
+            "p90": 2262,
+            "p99": 4684,
+            "p99.9": 6038,
+            "p99.99": 26294,
+            "max": 2257960
+          },
+          "C": {
+            "messages": 158886,
+            "mean": 707.0,
+            "min": 20,
+            "p50": 406,
+            "p90": 1568,
+            "p99": 4422,
+            "p99.9": 6028,
+            "p99.99": 18866,
+            "max": 429860
+          },
+          "X": {
+            "messages": 4669874,
+            "mean": 564.6,
+            "min": 18,
+            "p50": 294,
+            "p90": 1344,
+            "p99": 3496,
+            "p99.9": 5238,
+            "p99.99": 21542,
+            "max": 11909812
+          },
+          "D": {
+            "messages": 158273361,
+            "mean": 961.6,
+            "min": 22,
+            "p50": 654,
+            "p90": 2180,
+            "p99": 4522,
+            "p99.9": 5902,
+            "p99.99": 26576,
+            "max": 10803690
+          },
+          "U": {
+            "messages": 27222746,
+            "mean": 1067.7,
+            "min": 28,
+            "p50": 826,
+            "p90": 2080,
+            "p99": 4006,
+            "p99.9": 5700,
+            "p99.99": 27134,
+            "max": 8953356
+          },
+          "other": {
+            "messages": 5248419,
+            "mean": 39.3,
+            "min": 0,
+            "p50": 24,
+            "p90": 96,
+            "p99": 154,
+            "p99.9": 512,
+            "p99.99": 982,
+            "max": 630994
+          },
+          "orders": {
+            "messages": 363118215,
+            "mean": 864.7,
+            "min": 18,
+            "p50": 680,
+            "p90": 1740,
+            "p99": 4004,
+            "p99.9": 5600,
+            "p99.99": 25142,
+            "max": 12698764
+          },
+          "all": {
+            "messages": 368366634,
+            "mean": 852.9,
+            "min": 0,
+            "p50": 674,
+            "p90": 1728,
+            "p99": 3990,
+            "p99.9": 5590,
+            "p99.99": 25038,
+            "max": 12698764
+          }
+        },
+        "ns": {
+          "A": {
+            "messages": 162970455,
+            "mean": 200.6,
+            "min": 5,
+            "p50": 184,
+            "p90": 341,
+            "p99": 692,
+            "p99.9": 998,
+            "p99.99": 6362,
+            "max": 3444762
+          },
+          "F": {
+            "messages": 1725898,
+            "mean": 224.6,
+            "min": 6,
+            "p50": 193,
+            "p90": 417,
+            "p99": 763,
+            "p99.9": 1500,
+            "p99.99": 6929,
+            "max": 752360
+          },
+          "E": {
+            "messages": 8096995,
+            "mean": 269.2,
+            "min": 5,
+            "p50": 185,
+            "p90": 614,
+            "p99": 1271,
+            "p99.9": 1638,
+            "p99.99": 7133,
+            "max": 612511
+          },
+          "C": {
+            "messages": 158886,
+            "mean": 191.8,
+            "min": 5,
+            "p50": 110,
+            "p90": 425,
+            "p99": 1200,
+            "p99.9": 1635,
+            "p99.99": 5118,
+            "max": 116607
+          },
+          "X": {
+            "messages": 4669874,
+            "mean": 153.2,
+            "min": 5,
+            "p50": 80,
+            "p90": 365,
+            "p99": 948,
+            "p99.9": 1421,
+            "p99.99": 5844,
+            "max": 3230745
+          },
+          "D": {
+            "messages": 158273361,
+            "mean": 260.9,
+            "min": 6,
+            "p50": 177,
+            "p90": 591,
+            "p99": 1227,
+            "p99.9": 1601,
+            "p99.99": 7209,
+            "max": 2930690
+          },
+          "U": {
+            "messages": 27222746,
+            "mean": 289.6,
+            "min": 8,
+            "p50": 224,
+            "p90": 564,
+            "p99": 1087,
+            "p99.9": 1546,
+            "p99.99": 7361,
+            "max": 2428755
+          },
+          "other": {
+            "messages": 5248419,
+            "mean": 10.7,
+            "min": 0,
+            "p50": 7,
+            "p90": 26,
+            "p99": 42,
+            "p99.9": 139,
+            "p99.99": 266,
+            "max": 171168
+          },
+          "orders": {
+            "messages": 363118215,
+            "mean": 234.6,
+            "min": 5,
+            "p50": 184,
+            "p90": 472,
+            "p99": 1086,
+            "p99.9": 1519,
+            "p99.99": 6820,
+            "max": 3444762
+          },
+          "all": {
+            "messages": 368366634,
+            "mean": 231.4,
+            "min": 0,
+            "p50": 183,
+            "p90": 469,
+            "p99": 1082,
+            "p99.9": 1516,
+            "p99.99": 6792,
+            "max": 3444762
+          }
+        }
+      },
+      {
+        "log": "results/perf_20190130_run_latency_2.log",
+        "tsc_ghz": 3.686398,
+        "timer_overhead_cycles": {
+          "min_subtracted": 76,
+          "p50": 86,
+          "p99": 110
+        },
+        "samples_clamped_to_zero": 4106331,
+        "cycles": {
+          "A": {
+            "messages": 162970455,
+            "mean": 701.5,
+            "min": 0,
+            "p50": 638,
+            "p90": 1222,
+            "p99": 2526,
+            "p99.9": 3662,
+            "p99.99": 23656,
+            "max": 12767630
+          },
+          "F": {
+            "messages": 1725898,
+            "mean": 785.4,
+            "min": 0,
+            "p50": 654,
+            "p90": 1522,
+            "p99": 2750,
+            "p99.9": 5120,
+            "p99.99": 24318,
+            "max": 1939162
+          },
+          "E": {
+            "messages": 8096995,
+            "mean": 966.4,
+            "min": 0,
+            "p50": 644,
+            "p90": 2240,
+            "p99": 4680,
+            "p99.9": 6078,
+            "p99.99": 27220,
+            "max": 8319002
+          },
+          "C": {
+            "messages": 158886,
+            "mean": 662.6,
+            "min": 0,
+            "p50": 362,
+            "p90": 1530,
+            "p99": 4368,
+            "p99.9": 5822,
+            "p99.99": 21136,
+            "max": 398050
+          },
+          "X": {
+            "messages": 4669874,
+            "mean": 517.9,
+            "min": 0,
+            "p50": 248,
+            "p90": 1302,
+            "p99": 3476,
+            "p99.9": 5188,
+            "p99.99": 21978,
+            "max": 2597640
+          },
+          "D": {
+            "messages": 158273361,
+            "mean": 921.8,
+            "min": 0,
+            "p50": 608,
+            "p90": 2138,
+            "p99": 4486,
+            "p99.9": 5896,
+            "p99.99": 26580,
+            "max": 11920282
+          },
+          "U": {
+            "messages": 27222746,
+            "mean": 1026.7,
+            "min": 0,
+            "p50": 782,
+            "p90": 2036,
+            "p99": 3954,
+            "p99.9": 5660,
+            "p99.99": 27312,
+            "max": 6802564
+          },
+          "other": {
+            "messages": 5248419,
+            "mean": 28.0,
+            "min": 0,
+            "p50": 6,
+            "p90": 60,
+            "p99": 130,
+            "p99.9": 492,
+            "p99.99": 954,
+            "max": 5717982
+          },
+          "orders": {
+            "messages": 363118215,
+            "mean": 825.8,
+            "min": 0,
+            "p50": 638,
+            "p90": 1702,
+            "p99": 3966,
+            "p99.9": 5584,
+            "p99.99": 25286,
+            "max": 12767630
+          },
+          "all": {
+            "messages": 368366634,
+            "mean": 814.5,
+            "min": 0,
+            "p50": 632,
+            "p90": 1690,
+            "p99": 3954,
+            "p99.9": 5574,
+            "p99.99": 25194,
+            "max": 12767630
+          }
+        },
+        "ns": {
+          "A": {
+            "messages": 162970455,
+            "mean": 190.3,
+            "min": 0,
+            "p50": 173,
+            "p90": 331,
+            "p99": 685,
+            "p99.9": 993,
+            "p99.99": 6417,
+            "max": 3463443
+          },
+          "F": {
+            "messages": 1725898,
+            "mean": 213.1,
+            "min": 0,
+            "p50": 177,
+            "p90": 413,
+            "p99": 746,
+            "p99.9": 1389,
+            "p99.99": 6597,
+            "max": 526032
+          },
+          "E": {
+            "messages": 8096995,
+            "mean": 262.2,
+            "min": 0,
+            "p50": 175,
+            "p90": 608,
+            "p99": 1270,
+            "p99.9": 1649,
+            "p99.99": 7384,
+            "max": 2256675
+          },
+          "C": {
+            "messages": 158886,
+            "mean": 179.8,
+            "min": 0,
+            "p50": 98,
+            "p90": 415,
+            "p99": 1185,
+            "p99.9": 1579,
+            "p99.99": 5734,
+            "max": 107978
+          },
+          "X": {
+            "messages": 4669874,
+            "mean": 140.5,
+            "min": 0,
+            "p50": 67,
+            "p90": 353,
+            "p99": 943,
+            "p99.9": 1407,
+            "p99.99": 5962,
+            "max": 704655
+          },
+          "D": {
+            "messages": 158273361,
+            "mean": 250.0,
+            "min": 0,
+            "p50": 165,
+            "p90": 580,
+            "p99": 1217,
+            "p99.9": 1599,
+            "p99.99": 7210,
+            "max": 3233585
+          },
+          "U": {
+            "messages": 27222746,
+            "mean": 278.5,
+            "min": 0,
+            "p50": 212,
+            "p90": 552,
+            "p99": 1073,
+            "p99.9": 1535,
+            "p99.99": 7409,
+            "max": 1845315
+          },
+          "other": {
+            "messages": 5248419,
+            "mean": 7.6,
+            "min": 0,
+            "p50": 2,
+            "p90": 16,
+            "p99": 35,
+            "p99.9": 133,
+            "p99.99": 259,
+            "max": 1551103
+          },
+          "orders": {
+            "messages": 363118215,
+            "mean": 224.0,
+            "min": 0,
+            "p50": 173,
+            "p90": 462,
+            "p99": 1076,
+            "p99.9": 1515,
+            "p99.99": 6859,
+            "max": 3463443
+          },
+          "all": {
+            "messages": 368366634,
+            "mean": 220.9,
+            "min": 0,
+            "p50": 171,
+            "p90": 458,
+            "p99": 1073,
+            "p99.9": 1512,
+            "p99.99": 6834,
+            "max": 3463443
+          }
+        }
+      },
+      {
+        "log": "results/perf_20190130_run_latency_3.log",
+        "tsc_ghz": 3.686398,
+        "timer_overhead_cycles": {
+          "min_subtracted": 38,
+          "p50": 42,
+          "p99": 48
+        },
+        "samples_clamped_to_zero": 7,
+        "cycles": {
+          "A": {
+            "messages": 162970455,
+            "mean": 734.2,
+            "min": 20,
+            "p50": 670,
+            "p90": 1240,
+            "p99": 2536,
+            "p99.9": 3668,
+            "p99.99": 23800,
+            "max": 11132616
+          },
+          "F": {
+            "messages": 1725898,
+            "mean": 817.8,
+            "min": 20,
+            "p50": 690,
+            "p90": 1552,
+            "p99": 2788,
+            "p99.9": 5300,
+            "p99.99": 24488,
+            "max": 553412
+          },
+          "E": {
+            "messages": 8096995,
+            "mean": 989.6,
+            "min": 20,
+            "p50": 676,
+            "p90": 2246,
+            "p99": 4654,
+            "p99.9": 6020,
+            "p99.99": 27280,
+            "max": 12781640
+          },
+          "C": {
+            "messages": 158886,
+            "mean": 705.9,
+            "min": 22,
+            "p50": 406,
+            "p90": 1552,
+            "p99": 4294,
+            "p99.9": 5780,
+            "p99.99": 24698,
+            "max": 306840
+          },
+          "X": {
+            "messages": 4669874,
+            "mean": 555.3,
+            "min": 18,
+            "p50": 284,
+            "p90": 1328,
+            "p99": 3490,
+            "p99.9": 5270,
+            "p99.99": 22134,
+            "max": 6005862
+          },
+          "D": {
+            "messages": 158273361,
+            "mean": 953.6,
+            "min": 20,
+            "p50": 644,
+            "p90": 2160,
+            "p99": 4478,
+            "p99.9": 5876,
+            "p99.99": 27064,
+            "max": 12023558
+          },
+          "U": {
+            "messages": 27222746,
+            "mean": 1058.1,
+            "min": 30,
+            "p50": 814,
+            "p90": 2056,
+            "p99": 3962,
+            "p99.9": 5678,
+            "p99.99": 27594,
+            "max": 10678518
+          },
+          "other": {
+            "messages": 5248419,
+            "mean": 50.2,
+            "min": 0,
+            "p50": 30,
+            "p90": 96,
+            "p99": 162,
+            "p99.9": 514,
+            "p99.99": 1030,
+            "max": 341182
+          },
+          "orders": {
+            "messages": 363118215,
+            "mean": 857.9,
+            "min": 18,
+            "p50": 672,
+            "p90": 1728,
+            "p99": 3962,
+            "p99.9": 5570,
+            "p99.99": 25522,
+            "max": 12781640
+          },
+          "all": {
+            "messages": 368366634,
+            "mean": 846.4,
+            "min": 0,
+            "p50": 666,
+            "p90": 1716,
+            "p99": 3950,
+            "p99.9": 5560,
+            "p99.99": 25422,
+            "max": 12781640
+          }
+        },
+        "ns": {
+          "A": {
+            "messages": 162970455,
+            "mean": 199.2,
+            "min": 5,
+            "p50": 182,
+            "p90": 336,
+            "p99": 688,
+            "p99.9": 995,
+            "p99.99": 6456,
+            "max": 3019917
+          },
+          "F": {
+            "messages": 1725898,
+            "mean": 221.8,
+            "min": 5,
+            "p50": 187,
+            "p90": 421,
+            "p99": 756,
+            "p99.9": 1438,
+            "p99.99": 6643,
+            "max": 150123
+          },
+          "E": {
+            "messages": 8096995,
+            "mean": 268.4,
+            "min": 5,
+            "p50": 183,
+            "p90": 609,
+            "p99": 1262,
+            "p99.9": 1633,
+            "p99.99": 7400,
+            "max": 3467244
+          },
+          "C": {
+            "messages": 158886,
+            "mean": 191.5,
+            "min": 6,
+            "p50": 110,
+            "p90": 421,
+            "p99": 1165,
+            "p99.9": 1568,
+            "p99.99": 6700,
+            "max": 83236
+          },
+          "X": {
+            "messages": 4669874,
+            "mean": 150.6,
+            "min": 5,
+            "p50": 77,
+            "p90": 360,
+            "p99": 947,
+            "p99.9": 1430,
+            "p99.99": 6004,
+            "max": 1629195
+          },
+          "D": {
+            "messages": 158273361,
+            "mean": 258.7,
+            "min": 5,
+            "p50": 175,
+            "p90": 586,
+            "p99": 1215,
+            "p99.9": 1594,
+            "p99.99": 7342,
+            "max": 3261601
+          },
+          "U": {
+            "messages": 27222746,
+            "mean": 287.0,
+            "min": 8,
+            "p50": 221,
+            "p90": 558,
+            "p99": 1075,
+            "p99.9": 1540,
+            "p99.99": 7485,
+            "max": 2896735
+          },
+          "other": {
+            "messages": 5248419,
+            "mean": 13.6,
+            "min": 0,
+            "p50": 8,
+            "p90": 26,
+            "p99": 44,
+            "p99.9": 139,
+            "p99.99": 279,
+            "max": 92552
+          },
+          "orders": {
+            "messages": 363118215,
+            "mean": 232.7,
+            "min": 5,
+            "p50": 182,
+            "p90": 469,
+            "p99": 1075,
+            "p99.9": 1511,
+            "p99.99": 6923,
+            "max": 3467244
+          },
+          "all": {
+            "messages": 368366634,
+            "mean": 229.6,
+            "min": 0,
+            "p50": 181,
+            "p90": 465,
+            "p99": 1072,
+            "p99.9": 1508,
+            "p99.99": 6896,
+            "max": 3467244
+          }
+        }
+      }
+    ]
+  },
+  "multi_core": {
+    "note": "shard = stock_locate % W, as in include/lob/engine.hpp. demux: one thread reads each chunk and routes every message through W SPSC rings (BasicParallelEngine<ExactOrderBook, WireUnits>), timed from the first push of a chunk until every ring is drained. presplit: each chunk is first split per shard outside the timed region, then W workers apply their own buffer in parallel, timed from the start signal until the last worker finishes. The two are different measurements: presplit leaves out the demux entirely",
+    "cpu_assignment": "main/demux thread on logical CPU 0; workers on 1, 10, 11, 12, 13 (P-cores), then 2-9 (E-cores)",
+    "demux": [
+      {
+        "workers": 1,
+        "demux_cpu": 0,
+        "worker_cpus": [1],
+        "timed_s": 42.303,
+        "aggregate_msgs_per_s_millions": 8.71,
+        "ns_per_msg": 114.84,
+        "max_worker_share_over_mean": 1.00
+      },
+      {
+        "workers": 2,
+        "demux_cpu": 0,
+        "worker_cpus": [1, 10],
+        "timed_s": 19.719,
+        "aggregate_msgs_per_s_millions": 18.68,
+        "ns_per_msg": 53.53,
+        "max_worker_share_over_mean": 1.03
+      },
+      {
+        "workers": 3,
+        "demux_cpu": 0,
+        "worker_cpus": [1, 10, 11],
+        "timed_s": 12.203,
+        "aggregate_msgs_per_s_millions": 30.19,
+        "ns_per_msg": 33.13,
+        "max_worker_share_over_mean": 1.03
+      },
+      {
+        "workers": 4,
+        "demux_cpu": 0,
+        "worker_cpus": [1, 10, 11, 12],
+        "timed_s": 9.171,
+        "aggregate_msgs_per_s_millions": 40.16,
+        "ns_per_msg": 24.90,
+        "max_worker_share_over_mean": 1.05
+      },
+      {
+        "workers": 5,
+        "demux_cpu": 0,
+        "worker_cpus": [1, 10, 11, 12, 13],
+        "timed_s": 7.012,
+        "aggregate_msgs_per_s_millions": 52.54,
+        "ns_per_msg": 19.03,
+        "max_worker_share_over_mean": 1.04
+      },
+      {
+        "workers": 8,
+        "demux_cpu": 0,
+        "worker_cpus": [1, 10, 11, 12, 13, 2, 3, 4],
+        "timed_s": 8.537,
+        "aggregate_msgs_per_s_millions": 43.15,
+        "ns_per_msg": 23.17,
+        "max_worker_share_over_mean": 1.07
+      },
+      {
+        "workers": 13,
+        "demux_cpu": 0,
+        "worker_cpus": [1, 10, 11, 12, 13, 2, 3, 4, 5, 6, 7, 8, 9],
+        "timed_s": 9.978,
+        "aggregate_msgs_per_s_millions": 36.92,
+        "ns_per_msg": 27.09,
+        "max_worker_share_over_mean": 1.24
+      }
+    ],
+    "demux_log": "results/perf_20190130_run_multicore_demux.log",
+    "presplit": [
+      {
+        "workers": 1,
+        "main_cpu": 0,
+        "worker_cpus": [1],
+        "timed_s": 41.819,
+        "aggregate_msgs_per_s_millions": 8.81,
+        "ns_per_msg": 113.53,
+        "max_worker_share_over_mean": 1.00
+      },
+      {
+        "workers": 2,
+        "main_cpu": 0,
+        "worker_cpus": [1, 10],
+        "timed_s": 19.243,
+        "aggregate_msgs_per_s_millions": 19.14,
+        "ns_per_msg": 52.24,
+        "max_worker_share_over_mean": 1.03
+      },
+      {
+        "workers": 3,
+        "main_cpu": 0,
+        "worker_cpus": [1, 10, 11],
+        "timed_s": 11.786,
+        "aggregate_msgs_per_s_millions": 31.26,
+        "ns_per_msg": 31.99,
+        "max_worker_share_over_mean": 1.03
+      },
+      {
+        "workers": 4,
+        "main_cpu": 0,
+        "worker_cpus": [1, 10, 11, 12],
+        "timed_s": 8.742,
+        "aggregate_msgs_per_s_millions": 42.14,
+        "ns_per_msg": 23.73,
+        "max_worker_share_over_mean": 1.05
+      },
+      {
+        "workers": 5,
+        "main_cpu": 0,
+        "worker_cpus": [1, 10, 11, 12, 13],
+        "timed_s": 6.281,
+        "aggregate_msgs_per_s_millions": 58.64,
+        "ns_per_msg": 17.05,
+        "max_worker_share_over_mean": 1.04
+      },
+      {
+        "workers": 8,
+        "main_cpu": 0,
+        "worker_cpus": [1, 10, 11, 12, 13, 2, 3, 4],
+        "timed_s": 5.689,
+        "aggregate_msgs_per_s_millions": 64.76,
+        "ns_per_msg": 15.44,
+        "max_worker_share_over_mean": 1.07
+      },
+      {
+        "workers": 13,
+        "main_cpu": 0,
+        "worker_cpus": [1, 10, 11, 12, 13, 2, 3, 4, 5, 6, 7, 8, 9],
+        "timed_s": 3.691,
+        "aggregate_msgs_per_s_millions": 99.80,
+        "ns_per_msg": 10.02,
+        "max_worker_share_over_mean": 1.24
+      }
+    ],
+    "presplit_log": "results/perf_20190130_run_multicore_presplit.log"
+  },
+  "not_measured": ["memory use and page faults", "core clock frequency during the runs (the TSC runs at a constant rate; turbo state is not recorded)", "any host other than this laptop; no Linux run", "network or file-read time: every figure is for messages already in memory", "multi-core runs were made once each, not repeated"]
+}
