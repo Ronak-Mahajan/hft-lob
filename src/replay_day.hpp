@@ -48,9 +48,10 @@ inline std::string dollars(uint32_t wire) {                // 1652500 -> "165.25
 
 inline std::string clock_of(uint64_t ns) {                 // ns since midnight -> "HH:MM:SS.mmm"
     char b[32];
-    uint64_t s = ns / 1'000'000'000ull;
+    const uint64_t s = ns / 1'000'000'000u;
+    const uint64_t ms = (ns / 1'000'000u) % 1000u;
     std::snprintf(b, sizeof b, "%02" PRIu64 ":%02" PRIu64 ":%02" PRIu64 ".%03" PRIu64,
-                  s / 3600, (s / 60) % 60, s % 60, (ns / 1'000'000ull) % 1000);
+                  s / 3600, (s / 60) % 60, s % 60, ms);
     return b;
 }
 
