@@ -258,9 +258,9 @@ with run 1 above.
 pre-scan's placement: each ladder sits where that symbol's adds arrived
 during the day, and its width follows how widely they spread.
 `--placement first-add` uses only what is known when a symbol's first add
-arrives: every ladder 2,048 ticks wide (the widest that fits the 1,024 MB
-budget across 8,695 books), centered on that first add, on a one-cent grid at
-or above $1.00 and $0.0001 below. The books are the same (every chunk's
+arrives: every ladder 2,048 ticks wide (the widest power of two that fits
+the 1,024 MB budget across 8,695 books), centered on that first add, on a
+one-cent grid at or above $1.00 and $0.0001 below. The books are the same (every chunk's
 digest equals the differential run's), but the first add is a poor anchor:
 93,816,959 of the 191,919,099 adds land on a ladder and the rest take the
 overflow's `std::map`. With the same binary, back to back, one P-core applies
