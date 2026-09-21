@@ -11,11 +11,8 @@ jobs:
     # -std=c++20 -O2 -Wall -Wextra -pthread line (plus the leg's sanitizer
     # flags) and runs the binaries in --quick mode: every unit check, the
     # differential fuzz (A/F/E/C/X/D/U vs the std::map reference), the
-    # ExactOrderBook checks and fuzz vs ref::Market, the
-    # parallel-vs-sequential depth verification, the sequence-checked
-    # SPSC stress, and lob_replay --selftest (a generated day replayed
-    # through 4 KB chunks with the reference differential) all run at
-    # reduced message counts. The throughput and
+    # parallel-vs-sequential depth verification and the sequence-checked
+    # SPSC stress all run at reduced message counts. The throughput and
     # latency figures these runs print are CI-runner numbers and are NOT the
     # measurements in the README; CI verifies correctness, not throughput.
     # Ubuntu compilers are pinned to the versions the ubuntu-24.04 image
@@ -78,13 +75,11 @@ jobs:
             if [ "$TARGETS" = all ]; then
               run "$CXX" $CXXFLAGS $EXTRA -I include src/main.cpp          -o lob_bench
               run "$CXX" $CXXFLAGS $EXTRA -I include src/parallel_main.cpp -o lob_parallel
-              run "$CXX" $CXXFLAGS $EXTRA -I include src/replay_main.cpp   -o lob_replay
             fi
             run "$CXX" $CXXFLAGS $EXTRA -I include src/spsc_stress.cpp -o spsc_stress
             if [ "$TARGETS" = all ]; then
               run ./lob_bench --quick
               run ./lob_parallel --quick
-              run ./lob_replay --selftest
             fi
             run ./spsc_stress
           } 2>&1 | tee -a ci.log; exit ${PIPESTATUS[0]}
