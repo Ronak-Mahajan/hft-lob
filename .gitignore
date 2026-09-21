@@ -10,8 +10,10 @@
 /lob_perf_latency
 ci.log
 
-# Market data is never committed: results/*manifest* names the source files,
-# their sizes and hashes instead.
+# Market data is never committed: data/MANIFEST.md names the source file, its
+# sizes and hashes instead. Downloads go in data/, which keeps only that file.
+/data/*
+!/data/MANIFEST.md
 *.NASDAQ_ITCH50
 *.NASDAQ_ITCH50.gz
 *.itch
