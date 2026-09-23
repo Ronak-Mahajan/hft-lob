@@ -191,8 +191,167 @@ my $headline = obj(
     books_identical_to_differential_run => 'yes, every run, at every chunk boundary',
 );
 
+# ---- placement comparison: pre-scan, first-add and causal ladders --------
+# One binary per batch, the three placements interleaved back to back; every
+# run must pass, run on AC power, and print the chunk digests of that day's
+# causal differential run, which itself must pass with 0 mismatches.
+sub lat_tables {
+    my ($s, $f) = @_;
+    my ($cyc_tab) = $s =~ /\n  TSC cycles\n(.*?)\n\n/s or die "$f cycles";
+    my ($ns_tab) = $s =~ /\n  nanoseconds\n(.*?)\n\n/s or die "$f ns";
+    my (%cy, %nsx);
+    for my $pair ([\$cyc_tab, \%cy], [\$ns_tab, \%nsx]) {
+        for my $line (split /\n/, ${$pair->[0]}) {
+            next unless $line =~ /^  (\S+)\s+([\d,]+) \|\s+([\d.]+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+) \|\s+(\d+)$/;
+            $pair->[1]{$1} = { n => n($2), mean => $3, min => $4, p50 => $5, p90 => $6, p99 => $7, p999 => $8, p9999 => $9, max => $10 };
+        }
+    }
+    die "$f: table rows" unless keys %cy == @types && keys %nsx == @types;
+    return (\%cy, \%nsx);
+}
+sub diff_run {
+    my $f = shift;
+    my $s = slurp("$dir/$f");
+    my @cd = $s =~ /^  chunk +\d+ \| messages +[\d,]+ \| book digest ([0-9a-f]+)$/mg;
+    my ($dg) = $s =~ /book digest chain over [\d,]+ chunk boundaries: ([0-9a-f]+)/;
+    my ($cp, $cmm) = $s =~ /^  checkpoints ([\d,]+) \| book comparisons.*\| mismatches ([\d,]+)$/m or die "$f checkpoints";
+    my ($tm, $tmm) = $s =~ /after every order message: ([\d,]+) messages checked.*\| mismatches ([\d,]+)$/m or die "$f touch";
+    my ($lad, $ovf) = $s =~ /adds on the ladder ([\d,]+) \| in the overflow ([\d,]+)/ or die "$f adds";
+    my ($drop, $unk) = $s =~ /dropped_out_of_band ([\d,]+) \| unknown order id ([\d,]+)/ or die "$f drops";
+    my ($pl, $rc, $lv, $or) = $s =~ /causal ladders: placed ([\d,]+) \| re-centered ([\d,]+) times \| levels moved ([\d,]+) \| orders relinked ([\d,]+)/ or die "$f moves";
+    my ($commit) = $s =~ /^source: git commit (\S+)/m;
+    my $pass = $s =~ /^RESULT: PASS$/m ? 1 : 0;
+    die "$f: not PASS or mismatches" unless $pass && n($cmm) == 0 && n($tmm) == 0 && n($drop) == 0 && n($unk) == 0;
+    return { file => $f, cd => \@cd, digest => $dg, commit => $commit,
+             json => obj(log => "results/$f", commit => $commit, result => 'PASS',
+                         order_messages_checked_after_the_message => n($tm), mismatches_after_a_message => n($tmm),
+                         checkpoints => n($cp), mismatches_at_a_checkpoint => n($cmm),
+                         dropped_out_of_band => n($drop), unknown_order_ids => n($unk),
+                         adds_on_a_ladder => n($lad), adds_in_the_overflow => n($ovf),
+                         ladders_placed => n($pl), ladder_moves => n($rc), levels_moved => n($lv), orders_relinked => n($or),
+                         digest_chain => $dg) };
+}
+sub placement_batch {
+    my ($prefix, $diff, $n_lat) = @_;
+    my %P;
+    my %commits;
+    my $want = join ',', @{ $diff->{cd} };
+    for my $pl ('prescan', 'firstadd', 'causal') {
+        my (@t, @l);
+        for my $i (1 .. 5) {
+            my $f = "${prefix}_${pl}_throughput_$i.log";
+            my $s = slurp("$dir/$f");
+            my $c = common($s, $f);
+            my ($secs, $mps, $ns) = $s =~ /timed dispatch ([\d.]+) s for [\d,]+ messages \| ([\d.]+) M msgs\/s \| ([\d.]+) ns\/msg/ or die "$f: result";
+            my ($lad, $ovf) = $s =~ /adds on a ladder ([\d,]+) \| adds in the overflow ([\d,]+)/ or die "$f: adds";
+            my @mv = $s =~ /causal ladders: placed ([\d,]+) \| re-centered ([\d,]+) times \| levels moved ([\d,]+) \| orders relinked ([\d,]+)/;
+            die "$f: not PASS" unless $c->{pass};
+            die "$f: not on AC ($c->{power})" unless $c->{power} =~ /^AC line online/;
+            die "$f: digests differ from $diff->{file}" unless join(',', @{ $c->{chunk_digests} }) eq $want && $c->{digest} eq $diff->{digest};
+            $commits{ $c->{commit} } = 1;
+            push @t, { file => $f, secs => $secs, mps => $mps, ns => $ns, lad => n($lad), ovf => n($ovf), mv => [map { n($_) } @mv] };
+        }
+        for my $i (1 .. $n_lat) {
+            my $f = "${prefix}_${pl}_latency_$i.log";
+            my $s = slurp("$dir/$f");
+            my $c = common($s, $f);
+            die "$f: not PASS" unless $c->{pass};
+            die "$f: not on AC ($c->{power})" unless $c->{power} =~ /^AC line online/;
+            die "$f: digests differ from $diff->{file}" unless join(',', @{ $c->{chunk_digests} }) eq $want && $c->{digest} eq $diff->{digest};
+            $commits{ $c->{commit} } = 1;
+            my ($cy, $nsx) = lat_tables($s, $f);
+            my ($ovh) = $s =~ /subtracted from every sample, clamped at 0: (\d+) cycles/ or die "$f ovh";
+            my ($zero) = $s =~ /samples clamped to 0 after overhead subtraction: ([\d,]+)/;
+            my @mvl = $s =~ /placed or moved a ladder \(included in the rows above\): ([\d,]+) \| p50 (\d+) \| p90 (\d+) \| p99 (\d+) \| max (\d+) ns/;
+            push @l, { file => $f, ovh => $ovh, zero => n($zero), ns => $nsx, mvl => \@mvl };
+        }
+        my @m = map { $_->{mps} } @t;
+        my @nsv = map { $_->{ns} } @t;
+        my @srt = sort { $a <=> $b } @m;
+        $P{$pl} = { t => \@t, l => \@l, med => median(@m), min => $srt[0], max => $srt[-1], nsmed => median(@nsv) };
+    }
+    die "$prefix: runs built from more than one commit" unless keys %commits == 1;
+    my ($commit) = keys %commits;
+    my $pobj = sub {
+        my $pl = shift;
+        my $p = $P{$pl};
+        my $t0 = $p->{t}[0];
+        my @o = (
+            throughput_runs => [map { obj(log => "results/$_->{file}", timed_s => $_->{secs}, msgs_per_s_millions => $_->{mps}, ns_per_msg => $_->{ns}) } @{ $p->{t} }],
+            msgs_per_s_millions => obj(min => $p->{min}, median => $p->{med}, max => $p->{max}),
+            ns_per_msg_median => $p->{nsmed},
+            adds_on_a_ladder => $t0->{lad},
+            adds_in_the_overflow => $t0->{ovf},
+        );
+        push @o, (ladders_placed => $t0->{mv}[0], ladder_moves => $t0->{mv}[1], levels_moved => $t0->{mv}[2], orders_relinked => $t0->{mv}[3]) if @{ $t0->{mv} };
+        push @o, (latency_runs => [map { my $l = $_; obj(
+            log => "results/$l->{file}",
+            timer_overhead_subtracted_cycles => $l->{ovh},
+            samples_clamped_to_zero => $l->{zero},
+            ns_all_messages => pct_obj($l->{ns}{all}),
+            ns_by_type => obj(map { ($_ => pct_obj($l->{ns}{$_})) } @types),
+            (@{ $l->{mvl} } ? (ns_messages_that_placed_or_moved_a_ladder => obj(messages => n($l->{mvl}[0]), p50 => $l->{mvl}[1], p90 => $l->{mvl}[2], p99 => $l->{mvl}[3], max => $l->{mvl}[4])) : ()),
+        ) } @{ $p->{l} }]);
+        return obj(@o);
+    };
+    return { P => \%P, commit => $commit, json => obj(
+        commit => $commit,
+        differential => $diff->{json},
+        prescan => $pobj->('prescan'),
+        first_add => $pobj->('firstadd'),
+        causal => $pobj->('causal'),
+        causal_over_prescan_median_throughput => r($P{causal}{med} / $P{prescan}{med}, 3),
+        causal_over_first_add_median_throughput => r($P{causal}{med} / $P{firstadd}{med}, 3),
+    ) };
+}
+my $diff1 = diff_run('replay_20190130_causal_differential.log');
+die "causal and pre-scan differential runs printed different chunk digests"
+    unless join(',', @{ $diff1->{cd} }) eq join(',', @{ $replay->{cd} }) && $diff1->{digest} eq $replay->{digest};
+my $pc1 = placement_batch('perf_20190130_causal', $diff1, 2);
+my $diff2 = diff_run('replay_20191230_causal_differential.log');
+my $pc2 = placement_batch('perf_20191230_causal', $diff2, 1);
+my $cz = $pc1->{P}{causal};
+my $pz = $pc1->{P}{prescan};
+my $fz = $pc1->{P}{firstadd};
+my $cl = $cz->{l}[0]{ns}{all};
+my $pl1 = $pz->{l}[0]{ns}{all};
+$headline = obj(
+    placement => 'causal: each book places and moves its own ladder from the messages it has already applied (--placement causal)',
+    single_core_msgs_per_s_millions => obj(median => $cz->{med}, min => $cz->{min}, max => $cz->{max}, runs => scalar @{ $cz->{t} }),
+    single_core_ns_per_msg_median => $cz->{nsmed},
+    per_message_latency_ns_all_messages => obj(run => "results/$cz->{l}[0]{file}", p50 => $cl->{p50}, p90 => $cl->{p90}, p99 => $cl->{p99}, 'p99.9' => $cl->{p999}, 'p99.99' => $cl->{p9999}, max => $cl->{max}),
+    upper_bound_prescan_placement => obj(
+        note => 'ladders sized and placed from a pre-scan of the same day\'s file (look-ahead); same binary, same batch',
+        msgs_per_s_millions => obj(median => $pz->{med}, min => $pz->{min}, max => $pz->{max}),
+        per_message_latency_ns_all_messages => obj(run => "results/$pz->{l}[0]{file}", p50 => $pl1->{p50}, p90 => $pl1->{p90}, p99 => $pl1->{p99}, 'p99.9' => $pl1->{p999}),
+    ),
+    first_add_placement_msgs_per_s_millions_median => $fz->{med},
+    second_day_20191230_msgs_per_s_millions_median => obj(causal => $pc2->{P}{causal}{med}, prescan => $pc2->{P}{prescan}{med}, first_add => $pc2->{P}{firstadd}{med}),
+    multi_core_best_demux => obj(workers => $best_d->{w}, aggregate_msgs_per_s_millions => $best_d->{mps}, placement => 'prescan', commit => $commit),
+    multi_core_best_presplit => obj(workers => $best_p->{w}, aggregate_msgs_per_s_millions => $best_p->{mps}, placement => 'prescan', commit => $commit),
+    books_identical_to_differential_run => 'yes, every run, at every chunk boundary',
+);
+my $placement_json = obj(
+    what => 'the same binary with three ladder placements, run back to back and interleaved on logical CPU 1 (P-core), on AC power: prescan (sizes and windows from a pre-scan of the same file: look-ahead, an upper bound), first-add (fixed 2,048-tick ladders centered on each symbol\'s first add), causal (2,048-tick ladders each book centers on its first add and re-centers on its midpoint after 8 near-touch misses; the moves run inside the timed loop). Pool and id-map capacities come from the pre-scan in all three',
+    policy_parameters => obj(
+        ladder_ticks => 'the widest power of two whose ladders fit the 1,024 MB budget across all books: 2,048 on both days',
+        near_touch_misses_before_a_move => 8,
+        grid => '$0.01 for a center at or above $1.00, $0.0001 below',
+        chosen => 'before any causal run on either day; not fitted to either day',
+    ),
+    day_20190130 => $pc1->{json},
+    day_20191230 => obj(
+        data => obj(file => '12302019.NASDAQ_ITCH50', source => 'https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/', bytes => 8251407909,
+                    sha256 => '5d81c2e14a0f748b29c674b6a342796932702034b4dd341e39e9a9ec5bac610f',
+                    gz_sha256 => 'ef03df46a27e6bda4dead017f84c2e3979df7211f02c7868b51d53fceb99c689'),
+        (map { @$_ } @{ $pc2->{json} }),
+    ),
+    env_logs => ['results/perf_20190130_causal_env.log', 'results/perf_20191230_causal_env.log'],
+);
+
 my $json = obj(
     headline => $headline,
+    placement_comparison => $placement_json,
     data => obj(
         file => '01302019.NASDAQ_ITCH50 (decompressed NASDAQ TotalView-ITCH 5.0 BinaryFILE)',
         date => '2019-01-30',
@@ -238,6 +397,7 @@ my $json = obj(
         bad_length => 0,
     ),
     single_core_throughput => obj(
+        placement => "prescan (ladders sized and placed from a pre-scan of the same file: look-ahead)",
         what => 'end to end over the full day: parse, validate and apply every message (dispatch_segment: frame, look up the stock_locate book, itch::dispatch_checked<WireUnits>); only that loop over a chunk already in memory is timed, summed over the 42 chunks of 256 MB; file reads, the pre-scan and the per-chunk digests are not timed',
         cpu => 'logical CPU ' . $thr[0]{cpu} . ' (P-core), thread pinned, process HIGH_PRIORITY_CLASS',
         runs => [map { obj(log => "results/$_->{file}", timed_s => $_->{secs}, msgs_per_s_millions => $_->{mps}, ns_per_msg => $_->{ns}, tsc_cycles_per_msg => $_->{cyc}) } @thr],
@@ -246,6 +406,7 @@ my $json = obj(
         e_core_comparison => obj(log => "results/$ecore->{file}", cpu => "logical CPU $ecore->{cpu} (E-core)", msgs_per_s_millions => $ecore->{mps}, ns_per_msg => $ecore->{ns}, runs => 1),
     ),
     per_message_latency => obj(
+        placement => "prescan",
         what => 'every message of the day timed individually (no sampling): lfence; rdtsc; book lookup + itch::dispatch_checked<WireUnits>; rdtscp; lfence. The minimum of 100,000 empty timer pairs is subtracted from each sample (clamped at 0). Exact histogram, nearest-rank percentiles. Serialized timing measures one message in isolation; it is not the throughput figure',
         cpu => 'logical CPU ' . $lat[0]{cpu} . ' (P-core), thread pinned, process HIGH_PRIORITY_CLASS',
         headline_run => "results/$lat[$i_lat]{file}",
@@ -261,6 +422,7 @@ my $json = obj(
         ) } @lat],
     ),
     multi_core => obj(
+        placement => "prescan",
         note => 'shard = stock_locate % W, as in include/lob/engine.hpp. demux: one thread reads each chunk and routes every message through W SPSC rings (BasicParallelEngine<ExactOrderBook, WireUnits>), timed from the first push of a chunk until every ring is drained. presplit: each chunk is first split per shard outside the timed region, then W workers apply their own buffer in parallel, timed from the start signal until the last worker finishes. The two are different measurements: presplit leaves out the demux entirely',
         cpu_assignment => 'main/demux thread on logical CPU 0; workers on 1, 10, 11, 12, 13 (P-cores), then 2-9 (E-cores)',
         demux => [map { obj(workers => $_->{w}, demux_cpu => $_->{main}, worker_cpus => $_->{wc}, timed_s => $_->{secs}, aggregate_msgs_per_s_millions => $_->{mps}, ns_per_msg => $_->{ns}, max_worker_share_over_mean => $_->{ratio}) } @{ $demux->{rows} }],

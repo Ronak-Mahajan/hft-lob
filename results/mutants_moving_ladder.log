@@ -12,7 +12,6 @@ M4    a shift visits the levels in the wrong direction                         p
 M5    the pull onto the ladder stops one tick short of its top                 pass      pass      pass      pass      KILLED(127) KILLED(127)
 M6    the cached best is not rebuilt after levels come onto the ladder         pass      pass      KILLED(1) KILLED(1) KILLED(1) KILLED(1)
 M7    a slot a level left is not cleared                                       KILLED(1) KILLED(1) KILLED(1) KILLED(1) KILLED(127) KILLED(139)
-                 from src/replay_main.cpp:65:
 M8    adds deep in the book count as near-touch misses                         KILLED(1) pass      KILLED(1) pass      pass      pass     
 M9    adds off the would-be grid count as near-touch misses                    pass      pass      pass      KILLED(1) pass      pass     
 M10   a move never changes the grid                                            pass      pass      KILLED(1) pass      KILLED(1) KILLED(1)

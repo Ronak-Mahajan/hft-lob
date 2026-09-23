@@ -7,3 +7,5 @@ g++.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r4) 16.1.0
 ++ set +x
 Wed Sep 23 10:12:02 CDT 2026 start replay_causal_differential (on 1 battery status; correctness run, not timed)
 Wed Sep 23 10:35:35 CDT 2026 end replay_causal_differential
+--- run order and, before each timed run, power state, power plan and busiest processes
+2026-09-23 10:56:27 on battery: waiting for AC before perf_20190130_causal_prescan_throughput_1.log
