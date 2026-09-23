@@ -1,0 +1,573 @@
+{
+  "note": "second NASDAQ sample day, measured only for the ladder placement comparison; the README headline day is 2019-01-30 (perf_20190130.json)",
+  "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 7 265H",
+    "os": "Windows 10.0 build 26200 (Windows 11)",
+    "compiler": "g++ 16.1.0"
+  },
+  "policy_parameters": {
+    "ladder_ticks": "the widest power of two whose ladders fit the 1,024 MB budget across all books: 2,048 on both days",
+    "near_touch_misses_before_a_move": 8,
+    "grid": "$0.01 for a center at or above $1.00, $0.0001 below",
+    "chosen": "before any causal run on either day; not fitted to either day"
+  },
+  "what": "the same binary with three ladder placements, run back to back and interleaved on logical CPU 1 (P-core), on AC power: prescan (sizes and windows from a pre-scan of the same file: look-ahead, an upper bound), first-add (fixed 2,048-tick ladders centered on each symbol's first add), causal (2,048-tick ladders each book centers on its first add and re-centers on its midpoint after 8 near-touch misses; the moves run inside the timed loop). Pool and id-map capacities come from the pre-scan in all three",
+  "day_20191230": {
+    "data": {
+      "file": "12302019.NASDAQ_ITCH50",
+      "source": "https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/",
+      "bytes": 8251407909,
+      "sha256": "5d81c2e14a0f748b29c674b6a342796932702034b4dd341e39e9a9ec5bac610f",
+      "gz_sha256": "ef03df46a27e6bda4dead017f84c2e3979df7211f02c7868b51d53fceb99c689"
+    },
+    "commit": "b8ea69f059225ae816bb683c0fb57aeade1746b6",
+    "differential": {
+      "log": "results/replay_20191230_causal_differential.log",
+      "commit": "b8ea69f059225ae816bb683c0fb57aeade1746b6",
+      "result": "PASS",
+      "order_messages_checked_after_the_message": 263241937,
+      "mismatches_after_a_message": 0,
+      "checkpoints": 56,
+      "mismatches_at_a_checkpoint": 0,
+      "dropped_out_of_band": 0,
+      "unknown_order_ids": 0,
+      "adds_on_a_ladder": 136337584,
+      "adds_in_the_overflow": 3932939,
+      "ladders_placed": 8892,
+      "ladder_moves": 21743,
+      "levels_moved": 696294,
+      "orders_relinked": 1666814,
+      "digest_chain": "79026a67a5e5fe07"
+    },
+    "prescan": {
+      "throughput_runs": [
+        {
+          "log": "results/perf_20191230_causal_prescan_throughput_1.log",
+          "timed_s": 26.433,
+          "msgs_per_s_millions": 10.17,
+          "ns_per_msg": 98.36
+        },
+        {
+          "log": "results/perf_20191230_causal_prescan_throughput_2.log",
+          "timed_s": 27.324,
+          "msgs_per_s_millions": 9.84,
+          "ns_per_msg": 101.67
+        },
+        {
+          "log": "results/perf_20191230_causal_prescan_throughput_3.log",
+          "timed_s": 27.351,
+          "msgs_per_s_millions": 9.83,
+          "ns_per_msg": 101.77
+        },
+        {
+          "log": "results/perf_20191230_causal_prescan_throughput_4.log",
+          "timed_s": 25.174,
+          "msgs_per_s_millions": 10.68,
+          "ns_per_msg": 93.67
+        },
+        {
+          "log": "results/perf_20191230_causal_prescan_throughput_5.log",
+          "timed_s": 24.822,
+          "msgs_per_s_millions": 10.83,
+          "ns_per_msg": 92.36
+        }
+      ],
+      "msgs_per_s_millions": {
+        "min": 9.83,
+        "median": 10.17,
+        "max": 10.83
+      },
+      "ns_per_msg_median": 98.36,
+      "adds_on_a_ladder": 139863089,
+      "adds_in_the_overflow": 407434,
+      "latency_runs": [
+        {
+          "log": "results/perf_20191230_causal_prescan_latency_1.log",
+          "timer_overhead_subtracted_cycles": 36,
+          "samples_clamped_to_zero": 0,
+          "ns_all_messages": {
+            "messages": 268744780,
+            "mean": 215.6,
+            "min": 1,
+            "p50": 171,
+            "p90": 476,
+            "p99": 978,
+            "p99.9": 1328,
+            "p99.99": 5651,
+            "max": 3056575
+          },
+          "ns_by_type": {
+            "A": {
+              "messages": 117145568,
+              "mean": 183.0,
+              "min": 7,
+              "p50": 169,
+              "p90": 309,
+              "p99": 651,
+              "p99.9": 879,
+              "p99.99": 5050,
+              "max": 2586799
+            },
+            "F": {
+              "messages": 1485888,
+              "mean": 207.7,
+              "min": 8,
+              "p50": 173,
+              "p90": 444,
+              "p99": 722,
+              "p99.9": 1205,
+              "p99.99": 5556,
+              "max": 80659
+            },
+            "E": {
+              "messages": 5722824,
+              "mean": 257.3,
+              "min": 7,
+              "p50": 176,
+              "p90": 656,
+              "p99": 1105,
+              "p99.9": 1425,
+              "p99.99": 6222,
+              "max": 2407680
+            },
+            "C": {
+              "messages": 99917,
+              "mean": 201.9,
+              "min": 8,
+              "p50": 95,
+              "p90": 532,
+              "p99": 1085,
+              "p99.9": 1402,
+              "p99.99": 5825,
+              "max": 11864
+            },
+            "X": {
+              "messages": 2787676,
+              "mean": 134.6,
+              "min": 7,
+              "p50": 59,
+              "p90": 346,
+              "p99": 927,
+              "p99.9": 1226,
+              "p99.99": 2418,
+              "max": 41513
+            },
+            "D": {
+              "messages": 114360997,
+              "mean": 245.7,
+              "min": 8,
+              "p50": 176,
+              "p90": 577,
+              "p99": 1076,
+              "p99.9": 1389,
+              "p99.99": 6004,
+              "max": 3056575
+            },
+            "U": {
+              "messages": 21639067,
+              "mean": 285.3,
+              "min": 10,
+              "p50": 205,
+              "p90": 560,
+              "p99": 1060,
+              "p99.9": 1915,
+              "p99.99": 6322,
+              "max": 2350273
+            },
+            "other": {
+              "messages": 5502843,
+              "mean": 7.3,
+              "min": 1,
+              "p50": 6,
+              "p90": 9,
+              "p99": 22,
+              "p99.9": 156,
+              "p99.99": 253,
+              "max": 9607
+            },
+            "orders": {
+              "messages": 263241937,
+              "mean": 219.9,
+              "min": 7,
+              "p50": 173,
+              "p90": 480,
+              "p99": 981,
+              "p99.9": 1332,
+              "p99.99": 5696,
+              "max": 3056575
+            },
+            "all": {
+              "messages": 268744780,
+              "mean": 215.6,
+              "min": 1,
+              "p50": 171,
+              "p90": 476,
+              "p99": 978,
+              "p99.9": 1328,
+              "p99.99": 5651,
+              "max": 3056575
+            }
+          }
+        }
+      ]
+    },
+    "first_add": {
+      "throughput_runs": [
+        {
+          "log": "results/perf_20191230_causal_firstadd_throughput_1.log",
+          "timed_s": 52.961,
+          "msgs_per_s_millions": 5.07,
+          "ns_per_msg": 197.07
+        },
+        {
+          "log": "results/perf_20191230_causal_firstadd_throughput_2.log",
+          "timed_s": 51.432,
+          "msgs_per_s_millions": 5.23,
+          "ns_per_msg": 191.38
+        },
+        {
+          "log": "results/perf_20191230_causal_firstadd_throughput_3.log",
+          "timed_s": 53.157,
+          "msgs_per_s_millions": 5.06,
+          "ns_per_msg": 197.80
+        },
+        {
+          "log": "results/perf_20191230_causal_firstadd_throughput_4.log",
+          "timed_s": 51.435,
+          "msgs_per_s_millions": 5.22,
+          "ns_per_msg": 191.39
+        },
+        {
+          "log": "results/perf_20191230_causal_firstadd_throughput_5.log",
+          "timed_s": 51.197,
+          "msgs_per_s_millions": 5.25,
+          "ns_per_msg": 190.50
+        }
+      ],
+      "msgs_per_s_millions": {
+        "min": 5.06,
+        "median": 5.22,
+        "max": 5.25
+      },
+      "ns_per_msg_median": 191.39,
+      "adds_on_a_ladder": 86278246,
+      "adds_in_the_overflow": 53992277,
+      "latency_runs": [
+        {
+          "log": "results/perf_20191230_causal_firstadd_latency_1.log",
+          "timer_overhead_subtracted_cycles": 36,
+          "samples_clamped_to_zero": 0,
+          "ns_all_messages": {
+            "messages": 268744780,
+            "mean": 326.9,
+            "min": 1,
+            "p50": 199,
+            "p90": 775,
+            "p99": 1804,
+            "p99.9": 2648,
+            "p99.99": 7127,
+            "max": 8484444
+          },
+          "ns_by_type": {
+            "A": {
+              "messages": 117145568,
+              "mean": 257.9,
+              "min": 6,
+              "p50": 189,
+              "p90": 485,
+              "p99": 1357,
+              "p99.9": 2034,
+              "p99.99": 6304,
+              "max": 5457356
+            },
+            "F": {
+              "messages": 1485888,
+              "mean": 307.7,
+              "min": 8,
+              "p50": 210,
+              "p90": 661,
+              "p99": 1217,
+              "p99.9": 1778,
+              "p99.99": 8847,
+              "max": 4231536
+            },
+            "E": {
+              "messages": 5722824,
+              "mean": 353.5,
+              "min": 7,
+              "p50": 198,
+              "p90": 929,
+              "p99": 1959,
+              "p99.9": 2815,
+              "p99.99": 7307,
+              "max": 582180
+            },
+            "C": {
+              "messages": 99917,
+              "mean": 270.1,
+              "min": 8,
+              "p50": 157,
+              "p90": 702,
+              "p99": 1694,
+              "p99.9": 2503,
+              "p99.99": 5795,
+              "max": 7482
+            },
+            "X": {
+              "messages": 2787676,
+              "mean": 184.0,
+              "min": 7,
+              "p50": 80,
+              "p90": 450,
+              "p99": 1319,
+              "p99.9": 2072,
+              "p99.99": 5411,
+              "max": 480742
+            },
+            "D": {
+              "messages": 114360997,
+              "mean": 368.9,
+              "min": 8,
+              "p50": 221,
+              "p90": 927,
+              "p99": 1911,
+              "p99.9": 2773,
+              "p99.99": 7482,
+              "max": 8484444
+            },
+            "U": {
+              "messages": 21639067,
+              "mean": 572.2,
+              "min": 10,
+              "p50": 373,
+              "p90": 1388,
+              "p99": 2250,
+              "p99.9": 3263,
+              "p99.99": 9199,
+              "max": 4739657
+            },
+            "other": {
+              "messages": 5502843,
+              "mean": 8.6,
+              "min": 1,
+              "p50": 7,
+              "p90": 10,
+              "p99": 31,
+              "p99.9": 178,
+              "p99.99": 287,
+              "max": 15881
+            },
+            "orders": {
+              "messages": 263241937,
+              "mean": 333.6,
+              "min": 6,
+              "p50": 202,
+              "p90": 788,
+              "p99": 1812,
+              "p99.9": 2657,
+              "p99.99": 7178,
+              "max": 8484444
+            },
+            "all": {
+              "messages": 268744780,
+              "mean": 326.9,
+              "min": 1,
+              "p50": 199,
+              "p90": 775,
+              "p99": 1804,
+              "p99.9": 2648,
+              "p99.99": 7127,
+              "max": 8484444
+            }
+          }
+        }
+      ]
+    },
+    "causal": {
+      "throughput_runs": [
+        {
+          "log": "results/perf_20191230_causal_causal_throughput_1.log",
+          "timed_s": 28.362,
+          "msgs_per_s_millions": 9.48,
+          "ns_per_msg": 105.53
+        },
+        {
+          "log": "results/perf_20191230_causal_causal_throughput_2.log",
+          "timed_s": 29.616,
+          "msgs_per_s_millions": 9.07,
+          "ns_per_msg": 110.20
+        },
+        {
+          "log": "results/perf_20191230_causal_causal_throughput_3.log",
+          "timed_s": 29.321,
+          "msgs_per_s_millions": 9.17,
+          "ns_per_msg": 109.10
+        },
+        {
+          "log": "results/perf_20191230_causal_causal_throughput_4.log",
+          "timed_s": 27.132,
+          "msgs_per_s_millions": 9.91,
+          "ns_per_msg": 100.96
+        },
+        {
+          "log": "results/perf_20191230_causal_causal_throughput_5.log",
+          "timed_s": 27.013,
+          "msgs_per_s_millions": 9.95,
+          "ns_per_msg": 100.51
+        }
+      ],
+      "msgs_per_s_millions": {
+        "min": 9.07,
+        "median": 9.48,
+        "max": 9.95
+      },
+      "ns_per_msg_median": 105.53,
+      "adds_on_a_ladder": 136337584,
+      "adds_in_the_overflow": 3932939,
+      "ladders_placed": 8892,
+      "ladder_moves": 21743,
+      "levels_moved": 696294,
+      "orders_relinked": 1666814,
+      "latency_runs": [
+        {
+          "log": "results/perf_20191230_causal_causal_latency_1.log",
+          "timer_overhead_subtracted_cycles": 36,
+          "samples_clamped_to_zero": 0,
+          "ns_all_messages": {
+            "messages": 268744780,
+            "mean": 226.6,
+            "min": 1,
+            "p50": 174,
+            "p90": 491,
+            "p99": 1082,
+            "p99.9": 2020,
+            "p99.99": 5928,
+            "max": 5864341
+          },
+          "ns_by_type": {
+            "A": {
+              "messages": 117145568,
+              "mean": 187.1,
+              "min": 7,
+              "p50": 171,
+              "p90": 311,
+              "p99": 661,
+              "p99.9": 1004,
+              "p99.99": 5414,
+              "max": 5606005
+            },
+            "F": {
+              "messages": 1485888,
+              "mean": 232.8,
+              "min": 7,
+              "p50": 177,
+              "p90": 484,
+              "p99": 980,
+              "p99.9": 2655,
+              "p99.99": 7263,
+              "max": 184594
+            },
+            "E": {
+              "messages": 5722824,
+              "mean": 258.7,
+              "min": 7,
+              "p50": 177,
+              "p90": 650,
+              "p99": 1137,
+              "p99.9": 1598,
+              "p99.99": 6124,
+              "max": 146899
+            },
+            "C": {
+              "messages": 99917,
+              "mean": 210.3,
+              "min": 8,
+              "p50": 104,
+              "p90": 546,
+              "p99": 1110,
+              "p99.9": 1565,
+              "p99.99": 6315,
+              "max": 11011
+            },
+            "X": {
+              "messages": 2787676,
+              "mean": 137.5,
+              "min": 7,
+              "p50": 60,
+              "p90": 353,
+              "p99": 935,
+              "p99.9": 1323,
+              "p99.99": 2738,
+              "max": 388882
+            },
+            "D": {
+              "messages": 114360997,
+              "mean": 251.7,
+              "min": 8,
+              "p50": 178,
+              "p90": 590,
+              "p99": 1110,
+              "p99.9": 1625,
+              "p99.99": 5992,
+              "max": 5864341
+            },
+            "U": {
+              "messages": 21639067,
+              "mean": 366.0,
+              "min": 10,
+              "p50": 234,
+              "p90": 737,
+              "p99": 1965,
+              "p99.9": 3118,
+              "p99.99": 8084,
+              "max": 5511247
+            },
+            "other": {
+              "messages": 5502843,
+              "mean": 7.6,
+              "min": 1,
+              "p50": 7,
+              "p90": 9,
+              "p99": 23,
+              "p99.9": 157,
+              "p99.99": 253,
+              "max": 13034
+            },
+            "orders": {
+              "messages": 263241937,
+              "mean": 231.1,
+              "min": 7,
+              "p50": 175,
+              "p90": 495,
+              "p99": 1086,
+              "p99.9": 2031,
+              "p99.99": 5964,
+              "max": 5864341
+            },
+            "all": {
+              "messages": 268744780,
+              "mean": 226.6,
+              "min": 1,
+              "p50": 174,
+              "p90": 491,
+              "p99": 1082,
+              "p99.9": 2020,
+              "p99.99": 5928,
+              "max": 5864341
+            }
+          },
+          "ns_messages_that_placed_or_moved_a_ladder": {
+            "messages": 30635,
+            "p50": 1432,
+            "p90": 5086,
+            "p99": 32637,
+            "max": 184656
+          }
+        }
+      ]
+    },
+    "causal_over_prescan_median_throughput": 0.932,
+    "causal_over_first_add_median_throughput": 1.816
+  },
+  "env_log": "results/perf_20191230_causal_env.log"
+}

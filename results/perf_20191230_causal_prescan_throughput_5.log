@@ -1,0 +1,71 @@
+=== lob_perf: NASDAQ TotalView-ITCH 5.0 recorded day, mode single ===
+run: 2026-09-23 17:56:00 local | command: lob_perf.exe 12302019.NASDAQ_ITCH50 --cpu 1 --placement prescan
+machine
+  cpu: Intel(R) Core(TM) Ultra 7 265H | logical processors: 16
+  cpu sets (index: efficiency class / core / last-level cache):
+    0: 1/0/0 1: 1/1/0 2: 0/2/0 3: 0/3/0 4: 0/4/0 5: 0/5/0 6: 0/6/0 7: 0/7/0
+    8: 0/8/0 9: 0/9/0 10: 1/10/0 11: 1/11/0 12: 1/12/0 13: 1/13/0 14: 0/14/14 15: 0/15/14
+  os: Windows 10.0 build 26200
+  memory: 31.5 GB total, 5.7 GB available at start
+  power: AC line online | battery 98% | battery saver off
+  compiler: g++ 16.1.0 | flags: -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include
+  source: git commit b8ea69f059225ae816bb683c0fb57aeade1746b6
+  cpu order, fastest type first: 0 1 10 11 12 13 2 3 4 5 6 7 8 9 14 15
+tsc
+  invariant TSC (CPUID 80000007h EDX bit 8): yes
+  CPUID 15h nominal TSC frequency: 3.686400 GHz
+  measured against steady_clock (QueryPerformanceCounter on Windows), five 1 s windows: 3.686408 3.686401 3.686401 3.686402 3.686402 GHz | median 3.686402 GHz
+
+pre-scan and sizing (untimed, 66.9 s; placement prescan, the same as lob_replay's)
+  file 12302019.NASDAQ_ITCH50 | chunk 268,435,456 bytes | ladder budget 1,024 MB
+  bytes 8,251,407,909 | messages 268,744,780 | trailing bytes 0 | bad_length 0 | pre-scan 61.3 s
+  by type:
+    A 117,145,568 | C 99,917 | D 114,360,997 | E 5,722,824 | F 1,485,888 | H 8,966 | I 4,024,315 | J 34 | K 3
+    L 215,161 | P 1,218,602 | Q 17,836 | R 8,906 | S 6 | U 21,639,067 | V 1 | X 2,787,676 | Y 9,013
+  books 8,892 | ladders 1024 MB | pools 2,482,926 slots | id maps 7,139,520 slots | adds 140,270,523, on the ladders (predicted) 139,863,089
+
+single-core throughput | thread pinned to cpu 1 | timed: dispatch_segment() over each chunk in memory, summed
+  chunk   1 | messages   7,844,756 | through     7,844,756 | timed   0.3683 s |    46.9 ns/msg | book digest 7e6be98cad5b8c9d
+  chunk   2 | messages   8,572,655 | through    16,417,411 | timed   0.8221 s |    95.9 ns/msg | book digest f1387ab47cf88f64
+  chunk   3 | messages   8,797,106 | through    25,214,517 | timed   0.8551 s |    97.2 ns/msg | book digest 04e1373b7d95e09f
+  chunk   4 | messages   8,813,522 | through    34,028,039 | timed   0.8057 s |    91.4 ns/msg | book digest db9637b11740c1fd
+  chunk   5 | messages   8,830,461 | through    42,858,500 | timed   0.8262 s |    93.6 ns/msg | book digest 866979044d7634b0
+  chunk   6 | messages   8,845,815 | through    51,704,315 | timed   0.8136 s |    92.0 ns/msg | book digest c572635363487cfc
+  chunk   7 | messages   8,848,176 | through    60,552,491 | timed   0.8331 s |    94.1 ns/msg | book digest 9ad96eacf72add33
+  chunk   8 | messages   8,854,257 | through    69,406,748 | timed   0.8449 s |    95.4 ns/msg | book digest 42f31dd60eca18ae
+  chunk   9 | messages   8,856,320 | through    78,263,068 | timed   0.8306 s |    93.8 ns/msg | book digest 7fcc1b7ee4067370
+  chunk  10 | messages   8,853,045 | through    87,116,113 | timed   0.8210 s |    92.7 ns/msg | book digest cdc406f58d05714e
+  chunk  11 | messages   8,854,377 | through    95,970,490 | timed   0.8104 s |    91.5 ns/msg | book digest 90eb2a55d55fd087
+  chunk  12 | messages   8,845,921 | through   104,816,411 | timed   0.8384 s |    94.8 ns/msg | book digest 4d705f03431ef2c8
+  chunk  13 | messages   8,843,186 | through   113,659,597 | timed   0.8183 s |    92.5 ns/msg | book digest 20ddfc836c533588
+  chunk  14 | messages   8,852,507 | through   122,512,104 | timed   0.8564 s |    96.7 ns/msg | book digest fa80ae7fc1013ee4
+  chunk  15 | messages   8,844,270 | through   131,356,374 | timed   0.8030 s |    90.8 ns/msg | book digest 8bee059c48ffce7b
+  chunk  16 | messages   8,843,369 | through   140,199,743 | timed   0.8110 s |    91.7 ns/msg | book digest adce77c3a68543df
+  chunk  17 | messages   8,839,419 | through   149,039,162 | timed   0.8088 s |    91.5 ns/msg | book digest de113b7eafdd4bb5
+  chunk  18 | messages   8,848,521 | through   157,887,683 | timed   0.8161 s |    92.2 ns/msg | book digest 0e4956258a954534
+  chunk  19 | messages   8,844,387 | through   166,732,070 | timed   0.8168 s |    92.4 ns/msg | book digest 94b40dc1734fad1c
+  chunk  20 | messages   8,847,856 | through   175,579,926 | timed   0.8550 s |    96.6 ns/msg | book digest a9c5e8e8ec862378
+  chunk  21 | messages   8,837,975 | through   184,417,901 | timed   0.8203 s |    92.8 ns/msg | book digest cb722345ea4da4ab
+  chunk  22 | messages   8,839,376 | through   193,257,277 | timed   0.8270 s |    93.6 ns/msg | book digest 32dbe8ac0a83e6ff
+  chunk  23 | messages   8,835,859 | through   202,093,136 | timed   0.8174 s |    92.5 ns/msg | book digest cad660bc0b837353
+  chunk  24 | messages   8,827,776 | through   210,920,912 | timed   0.8296 s |    94.0 ns/msg | book digest c0a44e385af98498
+  chunk  25 | messages   8,833,977 | through   219,754,889 | timed   0.8301 s |    94.0 ns/msg | book digest 1e32d1e500621984
+  chunk  26 | messages   8,831,683 | through   228,586,572 | timed   0.8820 s |    99.9 ns/msg | book digest aaa0668518a00ecb
+  chunk  27 | messages   8,803,627 | through   237,390,199 | timed   0.8348 s |    94.8 ns/msg | book digest 61203766b21bf7fe
+  chunk  28 | messages   8,802,069 | through   246,192,268 | timed   0.8431 s |    95.8 ns/msg | book digest 4089f5fa263f1603
+  chunk  29 | messages   8,576,476 | through   254,768,744 | timed   0.8141 s |    94.9 ns/msg | book digest a7709cd264906035
+  chunk  30 | messages   7,302,290 | through   262,071,034 | timed   0.5719 s |    78.3 ns/msg | book digest 9021568b8a229f5e
+  chunk  31 | messages   6,673,746 | through   268,744,780 | timed   0.6965 s |   104.4 ns/msg | book digest 11ff00a1a92507d2
+
+result (single core, cpu 1)
+  timed dispatch 24.822 s for 268,744,780 messages | 10.83 M msgs/s | 92.36 ns/msg
+  timed dispatch in TSC cycles 91,501,941,870 | 340.48 cycles/msg
+  TSC over the whole pass (31.3 s): 3.686402 GHz
+  messages 268,744,780 of 268,744,780 | trailing bytes 0 | bad_length 0 | dropped_out_of_band 0 | unknown order id 0
+  adds on a ladder 139,863,089 | adds in the overflow 407,434 (predicted 407,434) | resting orders at end of file 0
+  book digest chain over 31 chunk boundaries: 79026a67a5e5fe07
+  checks: PASS
+wall time after setup 32 s
+
+RESULT: PASS
+exit 0

@@ -1,0 +1,73 @@
+=== lob_perf: NASDAQ TotalView-ITCH 5.0 recorded day, mode single ===
+run: 2026-09-23 17:35:33 local | command: lob_perf.exe 12302019.NASDAQ_ITCH50 --cpu 1 --placement causal
+machine
+  cpu: Intel(R) Core(TM) Ultra 7 265H | logical processors: 16
+  cpu sets (index: efficiency class / core / last-level cache):
+    0: 1/0/0 1: 1/1/0 2: 0/2/0 3: 0/3/0 4: 0/4/0 5: 0/5/0 6: 0/6/0 7: 0/7/0
+    8: 0/8/0 9: 0/9/0 10: 1/10/0 11: 1/11/0 12: 1/12/0 13: 1/13/0 14: 0/14/14 15: 0/15/14
+  os: Windows 10.0 build 26200
+  memory: 31.5 GB total, 5.0 GB available at start
+  power: AC line online | battery 91% | battery saver off
+  compiler: g++ 16.1.0 | flags: -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include
+  source: git commit b8ea69f059225ae816bb683c0fb57aeade1746b6
+  cpu order, fastest type first: 0 1 10 11 12 13 2 3 4 5 6 7 8 9 14 15
+tsc
+  invariant TSC (CPUID 80000007h EDX bit 8): yes
+  CPUID 15h nominal TSC frequency: 3.686400 GHz
+  measured against steady_clock (QueryPerformanceCounter on Windows), five 1 s windows: 3.686409 3.686402 3.686401 3.686402 3.686401 GHz | median 3.686402 GHz
+
+pre-scan and sizing (untimed, 71.2 s; placement causal)
+  placement causal: every ladder 2,048 ticks; each book centers it on its first add and re-centers it on its midpoint after 8 near-touch misses, grid $0.01 at or above $1.00 and $0.0001 below, from the messages already applied (the moves are inside the timed loop); pool and id-map capacities from the pre-scan
+  file 12302019.NASDAQ_ITCH50 | chunk 268,435,456 bytes | ladder budget 1,024 MB
+  bytes 8,251,407,909 | messages 268,744,780 | trailing bytes 0 | bad_length 0 | pre-scan 65.4 s
+  by type:
+    A 117,145,568 | C 99,917 | D 114,360,997 | E 5,722,824 | F 1,485,888 | H 8,966 | I 4,024,315 | J 34 | K 3
+    L 215,161 | P 1,218,602 | Q 17,836 | R 8,906 | S 6 | U 21,639,067 | V 1 | X 2,787,676 | Y 9,013
+  books 8,892 | ladders 879 MB | pools 2,482,926 slots | id maps 7,139,520 slots | adds 140,270,523, on the ladders (predicted) not predicted: causal ladders move
+
+single-core throughput | thread pinned to cpu 1 | timed: dispatch_segment() over each chunk in memory, summed
+  chunk   1 | messages   7,844,756 | through     7,844,756 | timed   0.4656 s |    59.4 ns/msg | book digest 7e6be98cad5b8c9d
+  chunk   2 | messages   8,572,655 | through    16,417,411 | timed   1.0080 s |   117.6 ns/msg | book digest f1387ab47cf88f64
+  chunk   3 | messages   8,797,106 | through    25,214,517 | timed   1.0564 s |   120.1 ns/msg | book digest 04e1373b7d95e09f
+  chunk   4 | messages   8,813,522 | through    34,028,039 | timed   0.9552 s |   108.4 ns/msg | book digest db9637b11740c1fd
+  chunk   5 | messages   8,830,461 | through    42,858,500 | timed   0.9626 s |   109.0 ns/msg | book digest 866979044d7634b0
+  chunk   6 | messages   8,845,815 | through    51,704,315 | timed   0.9745 s |   110.2 ns/msg | book digest c572635363487cfc
+  chunk   7 | messages   8,848,176 | through    60,552,491 | timed   0.9563 s |   108.1 ns/msg | book digest 9ad96eacf72add33
+  chunk   8 | messages   8,854,257 | through    69,406,748 | timed   1.0089 s |   113.9 ns/msg | book digest 42f31dd60eca18ae
+  chunk   9 | messages   8,856,320 | through    78,263,068 | timed   0.9492 s |   107.2 ns/msg | book digest 7fcc1b7ee4067370
+  chunk  10 | messages   8,853,045 | through    87,116,113 | timed   0.9872 s |   111.5 ns/msg | book digest cdc406f58d05714e
+  chunk  11 | messages   8,854,377 | through    95,970,490 | timed   0.9655 s |   109.0 ns/msg | book digest 90eb2a55d55fd087
+  chunk  12 | messages   8,845,921 | through   104,816,411 | timed   0.9623 s |   108.8 ns/msg | book digest 4d705f03431ef2c8
+  chunk  13 | messages   8,843,186 | through   113,659,597 | timed   1.0524 s |   119.0 ns/msg | book digest 20ddfc836c533588
+  chunk  14 | messages   8,852,507 | through   122,512,104 | timed   0.9669 s |   109.2 ns/msg | book digest fa80ae7fc1013ee4
+  chunk  15 | messages   8,844,270 | through   131,356,374 | timed   0.9902 s |   112.0 ns/msg | book digest 8bee059c48ffce7b
+  chunk  16 | messages   8,843,369 | through   140,199,743 | timed   0.9765 s |   110.4 ns/msg | book digest adce77c3a68543df
+  chunk  17 | messages   8,839,419 | through   149,039,162 | timed   0.9911 s |   112.1 ns/msg | book digest de113b7eafdd4bb5
+  chunk  18 | messages   8,848,521 | through   157,887,683 | timed   0.9814 s |   110.9 ns/msg | book digest 0e4956258a954534
+  chunk  19 | messages   8,844,387 | through   166,732,070 | timed   0.9866 s |   111.5 ns/msg | book digest 94b40dc1734fad1c
+  chunk  20 | messages   8,847,856 | through   175,579,926 | timed   0.9632 s |   108.9 ns/msg | book digest a9c5e8e8ec862378
+  chunk  21 | messages   8,837,975 | through   184,417,901 | timed   0.9747 s |   110.3 ns/msg | book digest cb722345ea4da4ab
+  chunk  22 | messages   8,839,376 | through   193,257,277 | timed   1.0033 s |   113.5 ns/msg | book digest 32dbe8ac0a83e6ff
+  chunk  23 | messages   8,835,859 | through   202,093,136 | timed   0.9948 s |   112.6 ns/msg | book digest cad660bc0b837353
+  chunk  24 | messages   8,827,776 | through   210,920,912 | timed   0.9791 s |   110.9 ns/msg | book digest c0a44e385af98498
+  chunk  25 | messages   8,833,977 | through   219,754,889 | timed   0.9828 s |   111.2 ns/msg | book digest 1e32d1e500621984
+  chunk  26 | messages   8,831,683 | through   228,586,572 | timed   0.9666 s |   109.4 ns/msg | book digest aaa0668518a00ecb
+  chunk  27 | messages   8,803,627 | through   237,390,199 | timed   1.0370 s |   117.8 ns/msg | book digest 61203766b21bf7fe
+  chunk  28 | messages   8,802,069 | through   246,192,268 | timed   1.0291 s |   116.9 ns/msg | book digest 4089f5fa263f1603
+  chunk  29 | messages   8,576,476 | through   254,768,744 | timed   0.9733 s |   113.5 ns/msg | book digest a7709cd264906035
+  chunk  30 | messages   7,302,290 | through   262,071,034 | timed   0.6759 s |    92.6 ns/msg | book digest 9021568b8a229f5e
+  chunk  31 | messages   6,673,746 | through   268,744,780 | timed   0.8398 s |   125.8 ns/msg | book digest 11ff00a1a92507d2
+
+result (single core, cpu 1)
+  timed dispatch 29.616 s for 268,744,780 messages | 9.07 M msgs/s | 110.20 ns/msg
+  timed dispatch in TSC cycles 109,177,439,850 | 406.25 cycles/msg
+  TSC over the whole pass (36.5 s): 3.686402 GHz
+  messages 268,744,780 of 268,744,780 | trailing bytes 0 | bad_length 0 | dropped_out_of_band 0 | unknown order id 0
+  adds on a ladder 136,337,584 | adds in the overflow 3,932,939 (predicted none: causal ladders move) | resting orders at end of file 0
+  causal ladders: placed 8,892 | re-centered 21,743 times | levels moved 696,294 | orders relinked 1,666,814
+  book digest chain over 31 chunk boundaries: 79026a67a5e5fe07
+  checks: PASS
+wall time after setup 37 s
+
+RESULT: PASS
+exit 0

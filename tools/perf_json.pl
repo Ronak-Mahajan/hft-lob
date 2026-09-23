@@ -4,6 +4,7 @@
 # digests differ from the differential run's, or the runs came from more than
 # one source commit.
 # usage: perl tools/perf_json.pl results > results/perf_20190130.json
+#        perl tools/perf_json.pl results 20191230 > results/perf_20191230.json
 use strict;
 use warnings;
 
@@ -346,8 +347,22 @@ my $placement_json = obj(
                     gz_sha256 => 'ef03df46a27e6bda4dead017f84c2e3979df7211f02c7868b51d53fceb99c689'),
         (map { @$_ } @{ $pc2->{json} }),
     ),
+    machine_state => 'AC line online before and after every run; the battery charged from 27% to 99% over the two batches, which ran back to back (power state and busiest processes before each run in the env logs)',
     env_logs => ['results/perf_20190130_causal_env.log', 'results/perf_20191230_causal_env.log'],
 );
+
+if (($ARGV[0] // '') eq '20191230') {
+    print js(obj(
+        note => 'second NASDAQ sample day, measured only for the ladder placement comparison; the README headline day is 2019-01-30 (perf_20190130.json)',
+        machine => obj(cpu => $c0->{cpu}, os => $c0->{os} . ' (Windows 11)', compiler => $c0->{compiler}),
+        policy_parameters => $placement_json->[1][1],
+        what => $placement_json->[0][1],
+        day_20191230 => $placement_json->[3][1],
+        env_log => 'results/perf_20191230_causal_env.log',
+    )), "
+";
+    exit 0;
+}
 
 my $json = obj(
     headline => $headline,
