@@ -21,8 +21,15 @@
 //    the lob_replay run (src/replay_fixture.hpp): sub-penny prices, prices
 //    far outside every ladder, replaces across the ladder boundary, chunks
 //    from 1 byte up, the reference compared after every message.
+// 8. Moving ladder unit checks      - ExactOrderBooks that place and move their
+//    own ladders (lob::Recenter): moves up and down with orders resting on
+//    both band edges, execute / cancel / delete / replace of orders that
+//    moved, grid changes across $1.00, and what must not move a ladder;
+//    every step audited (ExactOrderBook::audit()).
+// 9. Moving ladder fuzz            - drifting-price streams through moving
+//    ladders in six configurations vs ref::Market after every message.
 //
-// Usage:  lob_bench [--quick] [--cpu N]
+// Usage:  lob_bench [--quick] [--cpu N] [--only LIST]
 //   --quick  CI mode: smaller message counts (fuzz 250k, latency 100k,
 //            throughput 1M, exact fuzz 200k) so the whole run finishes in
 //            seconds. Every correctness check still runs; only the sizes
@@ -30,6 +37,8 @@
 //            measurements.
 //   --cpu N  pin the benchmark thread to logical CPU N (Windows builds;
 //            default 2).
+//   --only LIST  run only the listed sections, comma-separated: 1 to 7,
+//            8a to 8d (the four moving-ladder scenarios), 9.
 // ---------------------------------------------------------------------------
 #include <algorithm>
 #include <chrono>
@@ -80,6 +89,14 @@ struct SplitMix64 {           // deterministic, fast, good enough for fuzzing
     }
     uint32_t below(uint32_t n) { return static_cast<uint32_t>(next() % n); }
 };
+
+// --only: the sections to run ("1".."7", "8a".."8d", "9"); empty runs all.
+static std::vector<std::string> g_only;
+static bool want(const char* id) {
+    if (g_only.empty()) return true;
+    for (const std::string& s : g_only) if (s == id) return true;
+    return false;
+}
 
 static int g_failures = 0;
 #define CHECK(cond, what)                                                  \
@@ -882,7 +899,7 @@ static void moving_ladder_checks() {
     // (a) Shift up, K = 2: orders resting on both edges of the ladder, an
     // overflow level that the move brings onto the ladder, and a deep order
     // that stays in the overflow; then every operation on orders that moved.
-    {
+    if (want("8a")) {
         ExactOrderBook b(BookParams{0, 100, 64, 1u << 10, 12, Recenter{2, 10'000, 1}});
         CHECK(b.band() == 0, "a moving ladder starts unplaced");
         b.add(1, Side::Bid, 1'000'000, 100);                 // $100.00: places the ladder
@@ -931,11 +948,15 @@ static void moving_ladder_checks() {
         CHECK(idx(b, 10) == 0, "replace to the bottom edge of the moved ladder");
         AUDIT(b, "audit after operations on moved orders");
         CHECK(b.live_orders() == 5 && b.unknown_id() == 0, "five orders rest, no unknown ids");
+        b.add(11, Side::Bid, 1'004'700, 5);                  // near-touch miss 1 of 2 since the move
+        CHECK(b.recenters() == 1 && idx(b, 11) == kOverflowLevel,
+              "a move resets the count: one more near-touch miss does not move it");
+        AUDIT(b, "audit after a miss above the moved ladder");
     }
 
     // (b) Shift down, K = 1: levels that stay move up the ladder (visited top
     // down), the top-edge level leaves, a two-order level keeps its FIFO.
-    {
+    if (want("8b")) {
         ExactOrderBook b(BookParams{0, 100, 64, 1u << 10, 12, Recenter{1, 10'000, 1}});
         b.add(1, Side::Bid, 500'000, 1);                     // places: base 496,800
         b.add(2, Side::Ask, 500'100, 1);                     // index 33
@@ -964,7 +985,7 @@ static void moving_ladder_checks() {
     // (c) Grid changes, K = 1: a book above $1.00 on the $0.01 grid falls
     // below it and moves to the $0.0001 grid (a sub-penny overflow level comes
     // onto the ladder), then rises again (a sub-penny ladder level leaves).
-    {
+    if (want("8c")) {
         ExactOrderBook b(BookParams{0, 100, 64, 1u << 10, 12, Recenter{1, 10'000, 1}});
         b.add(1, Side::Bid, 10'100, 100);                    // $1.01: places on the $0.01 grid
         b.add(2, Side::Ask, 10'200, 100);
@@ -1001,7 +1022,7 @@ static void moving_ladder_checks() {
     // deep orders and sub-penny prices never count; near-touch misses count
     // until the third; with a spread wider than half the ladder the move
     // centers on the add, and the bid that falls out of the window leaves.
-    {
+    if (want("8d")) {
         ExactOrderBook b(BookParams{0, 100, 64, 1u << 10, 12, Recenter{3, 10'000, 1}});
         b.add(1, Side::Bid, 1'000'000, 1);
         b.add(2, Side::Ask, 1'000'100, 1);
@@ -1136,8 +1157,17 @@ int main(int argc, char** argv) {
         if (std::strcmp(argv[i], "--quick") == 0) quick = true;
         else if (std::strcmp(argv[i], "--cpu") == 0 && i + 1 < argc)
             cpu = static_cast<unsigned>(std::strtoul(argv[++i], nullptr, 10));
+        else if (std::strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
+            const std::string list = argv[++i];
+            for (size_t a = 0; a <= list.size();) {
+                size_t b = list.find(',', a);
+                if (b == std::string::npos) b = list.size();
+                if (b > a) g_only.push_back(list.substr(a, b - a));
+                a = b + 1;
+            }
+        }
         else {
-            std::printf("usage: %s [--quick] [--cpu N]\n", argv[0]);
+            std::printf("usage: %s [--quick] [--cpu N] [--only 1,2,...,7,8a,8b,8c,8d,9]\n", argv[0]);
             return 2;
         }
     }
@@ -1149,15 +1179,15 @@ int main(int argc, char** argv) {
     std::printf("TSC: %.2f cycles/ns  |  sizeof(Order)=%zu  sizeof(PriceLevel)=%zu\n\n",
                 cpn, sizeof(Order), sizeof(PriceLevel));
 
-    unit_checks();
-    differential_fuzz(quick ? 250'000 : 2'000'000);
-    latency_bench(cpn, quick ? 100'000 : 1'000'000);
-    throughput_bench(quick ? 1'000'000 : 10'000'000);
-    exact_book_checks();
-    exact_book_fuzz(quick ? 200'000 : 2'000'000);
-    replay_fixture();
-    moving_ladder_checks();
-    moving_ladder_fuzz(quick ? 100'000 : 1'000'000);
+    if (want("1")) unit_checks();
+    if (want("2")) differential_fuzz(quick ? 250'000 : 2'000'000);
+    if (want("3")) latency_bench(cpn, quick ? 100'000 : 1'000'000);
+    if (want("4")) throughput_bench(quick ? 1'000'000 : 10'000'000);
+    if (want("5")) exact_book_checks();
+    if (want("6")) exact_book_fuzz(quick ? 200'000 : 2'000'000);
+    if (want("7")) replay_fixture();
+    if (want("8a") || want("8b") || want("8c") || want("8d")) moving_ladder_checks();
+    if (want("9")) moving_ladder_fuzz(quick ? 100'000 : 1'000'000);
 
     if (g_failures) { std::printf("*** %d FAILURE(S) ***\n", g_failures); return 1; }
     std::printf("All verification passed.\n");
