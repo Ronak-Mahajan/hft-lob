@@ -47,6 +47,8 @@ struct ReplayOptions {
     int depth = 5;
     size_t chunk = size_t{256} << 20;
     uint64_t ladder_mb = 1024;
+    Placement placement = Placement::Prescan;   // see plan_books() in src/replay_day.hpp
+    uint32_t recenter_after = kRecenterAfter;   // placement causal only
     int cpu = 2;                        // < 0: leave the thread's affinity and priority alone
     bool print_chunks = true;           // one digest line per chunk
     bool print_checkpoints = true;      // one line per checkpoint (a mismatch always prints)
@@ -66,6 +68,7 @@ struct ReplayReport {
     uint64_t touch_checked = 0;         // order messages followed by the per-message check
     uint64_t touch_mismatches = 0;      // ... that found a difference
     uint64_t chunks = 0;
+    MoveTotals moves;                   // placement causal: what the moving ladders did
     uint64_t cuts = 0;                  // chunk boundaries that fell inside a message
     uint64_t prefix_cuts = 0;           // ... between the two bytes of its length prefix
     uint64_t final_digest = 0;          // books_digest() after the last message
@@ -123,8 +126,9 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
     if (!o.command.empty()) SAY("command: %s\n", o.command.c_str());
     SAY("source: git commit %s\n", LOB_GIT_COMMIT);
     SAY("file: %s\n", o.path.c_str());
-    SAY("chunk %s bytes | checkpoint every %s messages | ladder budget %s MB\n\n",
-        num(o.chunk).c_str(), num(o.checkpoint).c_str(), num(o.ladder_mb).c_str());
+    SAY("chunk %s bytes | checkpoint every %s messages | ladder budget %s MB | placement %s\n\n",
+        num(o.chunk).c_str(), num(o.checkpoint).c_str(), num(o.ladder_mb).c_str(),
+        placement_name(o.placement));
 
     // ---- pass 1 -----------------------------------------------------------
     DayScan d;
@@ -173,7 +177,10 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
 
     double ladder_mb = 0;
     const auto z0 = clock::now();
-    std::vector<Sizing> z = size_books(d, o.ladder_mb * 1'000'000ull, ladder_mb);
+    uint32_t uniform = 0;
+    std::vector<Sizing> z = plan_books(d, o.placement, o.ladder_mb * 1'000'000ull, ladder_mb, uniform,
+                                       o.recenter_after);
+    const bool causal = o.placement == Placement::Causal;
     const double size_s = std::chrono::duration<double>(clock::now() - z0).count();
     uint64_t n_books = 0, tick1 = 0, predicted_ladder_adds = 0, pool_slots = 0, idmap_slots = 0;
     std::vector<uint32_t> bands;
@@ -193,10 +200,20 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
         ladder_mb, num(bands.empty() ? 0 : bands.front()).c_str(),
         num(bands.empty() ? 0 : bands[bands.size() / 2]).c_str(),
         num(bands.empty() ? 0 : bands.back()).c_str());
-    SAY("  adds the chosen ladders cover: %s of %s (%.3f%%); the other %s rest in the overflow\n",
-        num(predicted_ladder_adds).c_str(), num(adds).c_str(),
-        adds ? 100.0 * static_cast<double>(predicted_ladder_adds) / static_cast<double>(adds) : 0.0,
-        num(adds - predicted_ladder_adds).c_str());
+    if (o.placement == Placement::FirstAdd)
+        SAY("  placement first-add: every ladder %s ticks, centered on the symbol's first add price, grid "
+            "$0.01 if that price is at least $1.00 and $0.0001 below\n", num(uniform).c_str());
+    if (causal)
+        SAY("  placement causal: every ladder %s ticks; each book centers it on its first add and re-centers "
+            "it on its midpoint after %u near-touch misses, grid $0.01 at or above $1.00 and $0.0001 below, "
+            "from the messages already applied (grids and bands above are before the first add)\n"
+            "  adds the ladders cover: not predicted, the ladders move\n",
+            num(uniform).c_str(), o.recenter_after);
+    else
+        SAY("  adds the chosen ladders cover: %s of %s (%.3f%%); the other %s rest in the overflow\n",
+            num(predicted_ladder_adds).c_str(), num(adds).c_str(),
+            adds ? 100.0 * static_cast<double>(predicted_ladder_adds) / static_cast<double>(adds) : 0.0,
+            num(adds - predicted_ladder_adds).c_str());
     SAY("  pools %s order slots (%.0f MB) | id maps %s slots (%.0f MB)\n\n",
         num(pool_slots).c_str(), static_cast<double>(pool_slots) * sizeof(Order) / 1e6,
         num(idmap_slots).c_str(), static_cast<double>(idmap_slots) * 16 / 1e6);
@@ -215,9 +232,13 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
         if (loc < 0) { SAY("  %-6s not in this day's stock directory\n", name.c_str()); continue; }
         const SymbolScan& s = d.sym[loc];
         const Sizing& q = z[loc];
-        SAY("  %-6s locate %-5d adds %s | peak resting %s | grid $%s | ladder %s ticks from $%s\n",
-            name.c_str(), loc, num(s.adds).c_str(), num(s.peak_live).c_str(),
-            q.tick == 1 ? "0.0001" : "0.01", num(q.band).c_str(), dollars(q.base).c_str());
+        if (causal)
+            SAY("  %-6s locate %-5d adds %s | peak resting %s | ladder %s ticks, placed by the book\n",
+                name.c_str(), loc, num(s.adds).c_str(), num(s.peak_live).c_str(), num(q.band).c_str());
+        else
+            SAY("  %-6s locate %-5d adds %s | peak resting %s | grid $%s | ladder %s ticks from $%s\n",
+                name.c_str(), loc, num(s.adds).c_str(), num(s.peak_live).c_str(),
+                q.tick == 1 ? "0.0001" : "0.01", num(q.band).c_str(), dollars(q.base).c_str());
         auto cross = [&](const char* what, const Cross& c) {
             if (c.seen)
                 SAY("         %s cross %s x %s shares at %s\n", what, dollars(c.price).c_str(),
@@ -236,8 +257,7 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
     for (int loc = 0; loc < 65536; ++loc) {
         const Sizing& q = z[loc];
         if (!q.has_book) continue;
-        owned[loc] = std::make_unique<ExactOrderBook>(
-            BookParams{q.base, q.tick, q.band, q.pool, q.idmap_log2});
+        owned[loc] = std::make_unique<ExactOrderBook>(book_params(q));
         books[loc] = owned[loc].get();
     }
     std::unique_ptr<ref::Market> refm;
@@ -400,12 +420,14 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
 
     // ---- totals -----------------------------------------------------------
     uint64_t dropped = 0, unknown = 0, ovf_adds = 0, resting = 0;
+    MoveTotals moves;
     for (const ExactOrderBook* b : books) {
         if (!b) continue;
         dropped += b->dropped_out_of_band();
         unknown += b->unknown_id();
         ovf_adds += b->overflow_adds();
         resting += b->live_orders();
+        moves.add(*b);
     }
     SAY("\n[3] totals\n");
     SAY("  messages: pass 1 %s | pass 2 %s | trailing bytes %s\n", num(d.messages).c_str(),
@@ -420,7 +442,11 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
     SAY("  adds on the ladder %s | in the overflow %s (%.3f%% of %s; sizing predicted %s)\n",
         num(adds - ovf_adds).c_str(), num(ovf_adds).c_str(),
         adds ? 100.0 * static_cast<double>(ovf_adds) / static_cast<double>(adds) : 0.0,
-        num(adds).c_str(), num(adds - predicted_ladder_adds).c_str());
+        num(adds).c_str(), causal ? "nothing, the ladders move" : num(adds - predicted_ladder_adds).c_str());
+    if (causal)
+        SAY("  causal ladders: placed %s | re-centered %s times | levels moved %s | orders relinked %s\n",
+            num(moves.placements).c_str(), num(moves.recenters).c_str(), num(moves.levels).c_str(),
+            num(moves.orders).c_str());
     if (refm) {
         const ref::Counters& c = refm->counters();
         SAY("  reference applied: A %s  F %s  E %s  C %s  X %s  D %s  U %s\n",
@@ -458,7 +484,7 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
 
     bool pass = n == d.messages && rd.trailing() == 0 && d.trailing == 0 && d.bad_length == 0 &&
                 bad_length == 0 && dropped == 0 && unknown == 0 &&
-                ovf_adds == adds - predicted_ladder_adds;
+                (causal || ovf_adds == adds - predicted_ladder_adds);
     if (refm) {
         const ref::Counters& c = refm->counters();
         pass = pass && mismatches == 0 && c.unknown_ref == 0 && c.duplicate_ref == 0 &&
@@ -491,6 +517,7 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
         report->touch_checked = touched.messages;
         report->touch_mismatches = touch_mismatches;
         report->chunks = chunks;
+        report->moves = moves;
         report->cuts = cuts;
         report->prefix_cuts = prefix_cuts;
         report->final_digest = books_digest(books.data());

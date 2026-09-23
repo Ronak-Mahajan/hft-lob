@@ -49,6 +49,29 @@
 // order between the two. The overflow is the slow path (O(log n), one map
 // node per new level); the ladder is meant to cover where the trading is.
 //
+// Moving ladder (BookParams::recenter.after = K > 0). Where a ladder should
+// sit is only known from the prices that arrive, so an ExactOrderBook can
+// place and move it itself, from the messages it has already applied. It
+// starts unplaced (band 0: every price misses) and the first add places it,
+// centered on that add. After that, an add that misses the ladder is a
+// near-touch miss when it is on the grid a re-centered ladder would use and
+// either at or better than the best price on its own side (or its side is
+// empty) or less than half a ladder width behind it. After K near-touch misses
+// since the last move, the ladder is re-centered on the midpoint of the book's
+// best bid and offer, or on the add's own price when the book is one-sided or
+// its spread is at least half a ladder wide, and the grid is chosen from that
+// center (recenter.fine_tick below recenter.coarse_from, `tick` at or above).
+// A move keeps the invariant that routing is a pure function of the price
+// under the current window: levels that leave the window move into the
+// overflow, overflow levels that enter it move onto the ladder, levels that
+// stay shift to their new index, and every order in a moved level gets its
+// new level_idx; the occupancy bitmap and cached best are then rebuilt. All
+// of it runs inside the add that triggered it (add_overflow(), the cold
+// path), so the ladder hot path is the same code with or without it. The
+// ladder's memory is allocated once, at construction; a move allocates one
+// overflow map node per level it pushes off the ladder, as an add that misses
+// the ladder does.
+//
 // The two are one template so that they share every line of the ladder, FIFO,
 // pool and id-map code. The overflow is a compile-time property rather than a
 // runtime flag because a runtime flag measurably changed the code generated
@@ -60,8 +83,11 @@
 // concurrency answer is core-pinned single-threaded + SPSC queues around it,
 // not locks inside the book. Hence: zero atomics, zero locks in here.
 // ---------------------------------------------------------------------------
+#include <cinttypes>
+#include <cstdio>
 #include <functional>
 #include <map>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -93,6 +119,14 @@ struct BBO {
     Price    ask_price = 0;   // valid only if ask_qty > 0
     uint64_t bid_qty   = 0;
     uint64_t ask_qty   = 0;
+};
+
+// What moving a ladder cost: levels moved (between ladder indices, off the
+// ladder or onto it) and orders whose level_idx was rewritten.
+struct MoveStats {
+    uint64_t levels = 0;
+    uint64_t orders = 0;
+    uint64_t grid_changes = 0;   // moves that also changed the grid
 };
 
 // --------------------------------------------------------------------------
@@ -230,7 +264,161 @@ public:
         }
     }
 
+    // ---- Moving the ladder (the owning book changed its window) ----------
+    // new_index(li) is the index ladder level li takes in the new window, or
+    // NIL when its price leaves the ladder (or is not on the new grid);
+    // old_price(li) is that level's price. Either every level leaves, or
+    // new_index is one uniform shift li - k clipped to the ladder, with
+    // `ascending` = (k > 0). Visiting the levels in that direction means a
+    // level's new slot is always empty when it arrives there: any level that
+    // held that slot sat on the near side of it and has already moved on.
+    // A level that leaves goes into the overflow at its exact price; that
+    // price cannot already be there, because under the old window it routed
+    // to the ladder. FIFO order is untouched: a level moves as a whole, and
+    // its queue links are pool indices.
+    template <typename OldPrice, typename NewIndex>
+    LOB_COLD void rewindow(OldPrice old_price, NewIndex new_index, bool ascending, MoveStats& st) {
+        static_assert(WithOverflow);
+        const uint32_t words = static_cast<uint32_t>(occupancy_.size());
+        for (uint32_t step = 0; step < words; ++step) {
+            const uint32_t w = ascending ? step : words - 1 - step;
+            uint64_t word = occupancy_[w];            // a copy: bits set below are not revisited
+            while (word) {
+                const uint32_t b = ascending ? static_cast<uint32_t>(std::countr_zero(word))
+                                             : 63 - static_cast<uint32_t>(std::countl_zero(word));
+                word &= ~(uint64_t{1} << b);
+                const uint32_t li = (w << 6) + b;
+                const PriceLevel L = levels_[li];
+                levels_[li] = PriceLevel{};
+                clear_bit(li);
+                const uint32_t ni = new_index(li);
+                if (ni == NIL) {
+                    const bool fresh = overflow_.emplace(old_price(li), L).second;
+                    LOB_ASSERT(fresh, "a level leaving the ladder is already in the overflow");
+                    (void)fresh;
+                    relink(L, kOverflowLevel, st);
+                } else {
+                    LOB_ASSERT(levels_[ni].count == 0, "a level's new slot is occupied");
+                    levels_[ni] = L;
+                    set_bit(ni);
+                    relink(L, ni, st);
+                }
+                ++st.levels;
+            }
+        }
+        recompute_best();
+    }
+
+    // Moves every overflow level whose price is in [lo, hi] and routes to the
+    // ladder (index_of(price) != NIL) onto the ladder at that index.
+    template <typename IndexOf>
+    LOB_COLD void import_overflow(Price lo, Price hi, IndexOf index_of, MoveStats& st) {
+        static_assert(WithOverflow);
+        // Bids are keyed descending: start at the first key <= hi. Asks: the
+        // first key >= lo.
+        auto it = overflow_.lower_bound(IsBid ? hi : lo);
+        while (it != overflow_.end() && (IsBid ? it->first >= lo : it->first <= hi)) {
+            const uint32_t li = index_of(it->first);
+            if (li == NIL) { ++it; continue; }         // between two grid points
+            LOB_ASSERT(levels_[li].count == 0, "an overflow level's ladder slot is occupied");
+            levels_[li] = it->second;
+            set_bit(li);
+            relink(levels_[li], li, st);
+            ++st.levels;
+            it = overflow_.erase(it);
+        }
+        recompute_best();
+    }
+
+    // Consistency of this side, for tests: the bitmap agrees with the level
+    // counts; every ladder level's queue is linked both ways, holds `count`
+    // orders of this side whose shares sum to total_qty, each with this
+    // level's index and price_of(li) as its price; the cached best is the
+    // best occupied index; every overflow level's price does not route to the
+    // ladder (index_of(price) == NIL), and its orders say kOverflowLevel and
+    // carry that price. Returns an empty string, or the first problem found.
+    template <typename PriceOf, typename IndexOf>
+    std::string audit(PriceOf price_of, IndexOf index_of) const {
+        char buf[200];
+        const Side side = IsBid ? Side::Bid : Side::Ask;
+        auto queue = [&](const PriceLevel& L, uint32_t want_idx, Price want_price) -> std::string {
+            uint64_t n = 0, qty = 0;
+            uint32_t prev = NIL, last = NIL;
+            for (uint32_t oi = L.head; oi != NIL; oi = pool_[oi].next) {
+                const Order& o = pool_[oi];
+                if (o.prev != prev || o.level_idx != want_idx || o.price != want_price || o.side != side ||
+                    ++n > L.count) {
+                    std::snprintf(buf, sizeof buf, "%s order %" PRIu64 " at %" PRIu32 ": level_idx %" PRIu32
+                                  " (want %" PRIu32 "), price %" PRIu32 ", queue position %" PRIu64,
+                                  IsBid ? "bid" : "ask", o.id, want_price, o.level_idx, want_idx, o.price, n);
+                    return buf;
+                }
+                qty += o.qty;
+                prev = last = oi;
+            }
+            if (n != L.count || qty != L.total_qty || last != L.tail) {
+                std::snprintf(buf, sizeof buf, "%s level %" PRIu32 ": %" PRIu64 " orders / %" PRIu64
+                              " shares in the queue, level says %" PRIu32 " / %" PRIu64,
+                              IsBid ? "bid" : "ask", want_price, n, qty, L.count, L.total_qty);
+                return buf;
+            }
+            return {};
+        };
+        uint32_t best = NIL;
+        for (uint32_t li = 0; li < levels_.size(); ++li) {
+            const PriceLevel& L = levels_[li];
+            const bool bit = (occupancy_[li >> 6] >> (li & 63)) & 1;
+            if (bit != (L.count != 0) || (L.count == 0 && L.total_qty != 0)) {
+                std::snprintf(buf, sizeof buf, "%s ladder index %" PRIu32 ": bit %d, count %" PRIu32,
+                              IsBid ? "bid" : "ask", li, bit ? 1 : 0, L.count);
+                return buf;
+            }
+            if (!L.count) continue;
+            if (best == NIL || better(li, best)) best = li;
+            std::string q = queue(L, li, price_of(li));
+            if (!q.empty()) return q;
+        }
+        if (best != best_) {
+            std::snprintf(buf, sizeof buf, "%s cached best %" PRIu32 ", bitmap best %" PRIu32,
+                          IsBid ? "bid" : "ask", best_, best);
+            return buf;
+        }
+        if constexpr (WithOverflow) {
+            for (const auto& [price, L] : overflow_) {
+                if (index_of(price) != NIL || L.count == 0) {
+                    std::snprintf(buf, sizeof buf, "%s overflow level %" PRIu32 " routes to ladder index %"
+                                  PRIu32 " (count %" PRIu32 ")", IsBid ? "bid" : "ask", price,
+                                  index_of(price), L.count);
+                    return buf;
+                }
+                std::string q = queue(L, kOverflowLevel, price);
+                if (!q.empty()) return q;
+            }
+        }
+        return {};
+    }
+
 private:
+    LOB_COLD void relink(const PriceLevel& L, uint32_t li, MoveStats& st) {
+        for (uint32_t oi = L.head; oi != NIL; oi = pool_[oi].next) {
+            pool_[oi].level_idx = li;
+            ++st.orders;
+        }
+    }
+
+    // The best occupied ladder index from the bitmap alone.
+    void recompute_best() {
+        best_ = NIL;
+        const uint32_t words = static_cast<uint32_t>(occupancy_.size());
+        if constexpr (IsBid) {
+            for (uint32_t w = words; w-- > 0;)
+                if (occupancy_[w]) { best_ = (w << 6) + 63 - static_cast<uint32_t>(std::countl_zero(occupancy_[w])); return; }
+        } else {
+            for (uint32_t w = 0; w < words; ++w)
+                if (occupancy_[w]) { best_ = (w << 6) + static_cast<uint32_t>(std::countr_zero(occupancy_[w])); return; }
+        }
+    }
+
     LOB_FORCE_INLINE void set_bit(uint32_t li)   { occupancy_[li >> 6] |=  (uint64_t{1} << (li & 63)); }
     LOB_FORCE_INLINE void clear_bit(uint32_t li) { occupancy_[li >> 6] &= ~(uint64_t{1} << (li & 63)); }
 
@@ -293,12 +481,23 @@ private:
 // --------------------------------------------------------------------------
 // BookParams - construction parameters of an ExactOrderBook.
 // --------------------------------------------------------------------------
+// Moving ladder (see the header comment). after == 0: the ladder stays
+// where BookParams puts it. after == K > 0: base is ignored, the first add
+// places the ladder and K near-touch misses move it; the grid is fine_tick
+// for a center below coarse_from and BookParams::tick at or above it.
+struct Recenter {
+    uint32_t after       = 0;
+    Price    coarse_from = 0;
+    Price    fine_tick   = 1;
+};
+
 struct BookParams {
     Price    base;              // lowest ladder price
     Price    tick;              // ladder grid step (>= 1), same units as base
     uint32_t band;              // ladder width in ticks (>= 1)
     uint32_t max_live_orders;   // order pool capacity
     unsigned idmap_log2;        // id map slots = 2^idmap_log2 >= 2 * max_live_orders
+    Recenter recenter = {};     // default: a fixed ladder
 };
 
 // --------------------------------------------------------------------------
@@ -338,7 +537,10 @@ public:
           bids_(p.band, pool_),
           asks_(p.band, pool_),
           tick_(p.tick),
-          tick_recip_(p.tick > 1 ? ~uint64_t{0} / p.tick + 1 : 0)
+          tick_recip_(p.tick > 1 ? ~uint64_t{0} / p.tick + 1 : 0),
+          width_(p.band),
+          coarse_tick_(p.tick),
+          recenter_(p.recenter)
     {
         static_assert(WithOverflow, "a LimitOrderBook takes (base_tick, band, max_live, idmap_log2)");
         LOB_ASSERT(p.tick >= 1, "tick must be >= 1");
@@ -348,6 +550,12 @@ public:
         LOB_ASSERT(uint64_t{p.base} + uint64_t{p.band} * p.tick <= (uint64_t{1} << 32),
                    "ladder exceeds the u32 price range");
         check_capacity(p.max_live_orders, p.idmap_log2);
+        if (recenter_.after != 0) {
+            LOB_ASSERT(p.recenter.fine_tick >= 1 && uint64_t{p.band} * p.recenter.fine_tick <= (uint64_t{1} << 32),
+                       "fine-grid ladder exceeds the u32 price range");
+            base_ = 0;
+            band_ = 0;                            // unplaced: every price misses until the first add
+        }
     }
 
     // ---- Add ------------------------------------------------------------
@@ -360,13 +568,7 @@ public:
             else                        ++dropped_out_of_band_;
             return;
         }
-        uint32_t oi = pool_.alloc();
-        Order& o = pool_[oi];
-        o.id = id; o.qty = qty; o.price = price;
-        o.level_idx = li; o.side = side;
-        if (side == Side::Bid) bids_.insert(oi, o, li);
-        else                   asks_.insert(oi, o, li);
-        idmap_.insert(id, oi);
+        add_at(li, id, side, price, qty);
     }
 
     // ---- Execute (ITCH 'E'/'C'): shares trade against a resting order ----
@@ -467,7 +669,48 @@ public:
     // Live orders currently resting in the book.
     uint64_t live_orders() const { return idmap_.size(); }
 
+    // Moving ladder (all 0 with a fixed ladder): adds that placed it (0 or
+    // 1), moves after that, and what the moves cost (MoveStats).
+    uint64_t placements() const { return placements_; }
+    uint64_t recenters() const { return recenters_; }
+    const MoveStats& move_stats() const { return moved_; }
+
+    // Consistency of the whole book, for tests (see BookSide::audit): both
+    // sides, and every live order reachable through the id map with its
+    // side's queue. Empty string when consistent.
+    std::string audit() const {
+        auto price_of = [this](uint32_t li) { return static_cast<Price>(base_ + li * tick()); };
+        auto index_of = [this](Price p) { return ladder_index(p); };
+        std::string s = bids_.audit(price_of, index_of);
+        if (s.empty()) s = asks_.audit(price_of, index_of);
+        if (s.empty() && band_ != 0 && uint64_t{base_} + uint64_t{band_} * tick() > (uint64_t{1} << 32))
+            s = "ladder exceeds the u32 price range";
+        if (!s.empty()) return s;
+        uint64_t n = 0;
+        for (Side side : {Side::Bid, Side::Ask})
+            for_each_level(side, [&](Price, const PriceLevel& L) {
+                for (uint32_t oi = L.head; oi != NIL; oi = pool_[oi].next) {
+                    ++n;
+                    if (s.empty() && idmap_.find(pool_[oi].id) != oi)
+                        s = "order " + std::to_string(pool_[oi].id) + " is not where the id map says";
+                }
+            });
+        if (s.empty() && n != idmap_.size())
+            s = std::to_string(n) + " orders in the queues, " + std::to_string(idmap_.size()) + " in the id map";
+        return s;
+    }
+
 private:
+    LOB_FORCE_INLINE void add_at(uint32_t li, uint64_t id, Side side, Price price, uint32_t qty) {
+        uint32_t oi = pool_.alloc();
+        Order& o = pool_[oi];
+        o.id = id; o.qty = qty; o.price = price;
+        o.level_idx = li; o.side = side;
+        if (side == Side::Bid) bids_.insert(oi, o, li);
+        else                   asks_.insert(oi, o, li);
+        idmap_.insert(id, oi);
+    }
+
     static void check_capacity(uint32_t max_live_orders, unsigned idmap_log2) {
         // The id map must stay at load <= 0.5 when every pool slot is live:
         // that is what keeps probe sequences short and, together with the
@@ -502,6 +745,10 @@ private:
     }
 
     LOB_COLD void add_overflow(uint64_t id, Side side, Price price, uint32_t qty) {
+        if (recenter_.after != 0 && near_touch_miss(side, price)) {   // the ladder moved
+            const uint32_t li = ladder_index(price);
+            if (li != NIL) { add_at(li, id, side, price, qty); return; }
+        }
         uint32_t oi = pool_.alloc();
         Order& o = pool_[oi];
         o.id = id; o.qty = qty; o.price = price;
@@ -510,6 +757,77 @@ private:
         else                   asks_.insert_overflow(oi, o);
         idmap_.insert(id, oi);
         ++overflow_adds_;
+    }
+
+    // ---- Moving ladder ------------------------------------------------------
+    Price grid_for(Price center) const {
+        return center < recenter_.coarse_from ? recenter_.fine_tick : coarse_tick_;
+    }
+
+    // An add at `price` on `side` just missed the ladder. Counts it when it
+    // is a near-touch miss (see the header comment) and moves the ladder on
+    // the K-th; places the ladder if this is the book's first add. Returns
+    // true when the ladder moved.
+    LOB_COLD bool near_touch_miss(Side side, Price price) {
+        if (band_ == 0) return move_ladder(price);
+        const BBO q = bbo();
+        Price center = price;
+        if (q.bid_qty && q.ask_qty && q.ask_price > q.bid_price) {
+            const Price spread = q.ask_price - q.bid_price;
+            const Price mid = q.bid_price + spread / 2;
+            if (uint64_t{spread} < uint64_t{width_} / 2 * grid_for(mid)) center = mid;
+        }
+        const Price g = grid_for(center);
+        if (price % g != 0) return false;             // not on the grid a moved ladder would use
+        uint64_t behind = 0;                          // behind the best price on its own side
+        if (side == Side::Bid && q.bid_qty && price < q.bid_price) behind = q.bid_price - price;
+        if (side == Side::Ask && q.ask_qty && price > q.ask_price) behind = price - q.ask_price;
+        if (behind >= uint64_t{width_} / 2 * g) return false;   // deep in the book
+        if (++near_misses_ < recenter_.after) return false;
+        near_misses_ = 0;
+        return move_ladder(center);
+    }
+
+    // Centers the ladder (width_ ticks) on `center`, on the grid for that
+    // center, clamped so that base + width * tick stays within u32, and
+    // re-establishes routing (see BookSide::rewindow / import_overflow).
+    // Returns false when the ladder is already there.
+    LOB_COLD bool move_ladder(Price center) {
+        const Price g = grid_for(center);
+        const uint64_t w = width_;
+        uint64_t start = center / g;
+        start = start >= w / 2 ? start - w / 2 : 0;
+        const uint64_t max_start = ((uint64_t{1} << 32) - w * g) / g;
+        if (start > max_start) start = max_start;
+        const Price nb = static_cast<Price>(start * g);
+        const bool placed = band_ != 0;
+        if (placed && g == tick_ && nb == base_) return false;
+        const Price ob = base_, ot = tick_;
+        auto old_price = [ob, ot](uint32_t li) { return static_cast<Price>(ob + li * ot); };
+        if (placed && g == ot) {                      // same grid: a shift by k ticks
+            const int64_t k = (static_cast<int64_t>(nb) - static_cast<int64_t>(ob)) / static_cast<int64_t>(g);
+            auto shifted = [k, w](uint32_t li) -> uint32_t {
+                const int64_t n = static_cast<int64_t>(li) - k;
+                return n >= 0 && n < static_cast<int64_t>(w) ? static_cast<uint32_t>(n) : NIL;
+            };
+            bids_.rewindow(old_price, shifted, k > 0, moved_);
+            asks_.rewindow(old_price, shifted, k > 0, moved_);
+        } else if (placed) {                          // new grid: every level leaves, then returns if it can
+            ++moved_.grid_changes;
+            auto gone = [](uint32_t) -> uint32_t { return NIL; };
+            bids_.rewindow(old_price, gone, true, moved_);
+            asks_.rewindow(old_price, gone, true, moved_);
+        }
+        base_ = nb;
+        band_ = width_;
+        tick_ = g;
+        tick_recip_ = g > 1 ? ~uint64_t{0} / g + 1 : 0;
+        const Price hi = static_cast<Price>(nb + (w - 1) * g);          // last ladder price
+        auto index_of = [this](Price p) { return ladder_index(p); };
+        bids_.import_overflow(nb, hi, index_of, moved_);
+        asks_.import_overflow(nb, hi, index_of, moved_);
+        if (placed) ++recenters_; else ++placements_;
+        return true;
     }
 
     template <bool IsBid>
@@ -542,6 +860,14 @@ private:
     uint64_t                     overflow_adds_       = 0;
     Price                        tick_                = 1;
     uint64_t                     tick_recip_          = 0;   // floor((2^64 - 1) / tick) + 1 when tick > 1
+    // Moving ladder only (see BookParams::recenter).
+    uint32_t                     width_               = 0;   // ladder ticks allocated; band_ once placed
+    Price                        coarse_tick_         = 1;   // BookParams::tick
+    Recenter                     recenter_            = {};
+    uint32_t                     near_misses_         = 0;   // since the last move
+    uint64_t                     placements_          = 0;
+    uint64_t                     recenters_           = 0;
+    MoveStats                    moved_               = {};
 };
 
 using LimitOrderBook = BasicOrderBook<false>;

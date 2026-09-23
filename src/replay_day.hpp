@@ -325,6 +325,7 @@ struct Sizing {
     unsigned idmap_log2 = 4;
     uint64_t ladder_adds = 0;           // adds the chosen window covers
     uint64_t on_grid = 0;               // adds on the chosen grid
+    uint32_t recenter_after = 0;        // > 0: a moving ladder (placement causal)
 };
 
 constexpr int kMaxK = 12;               // widths 64 << 0 .. 64 << 12
@@ -417,6 +418,125 @@ inline std::vector<Sizing> size_books(DayScan& d, uint64_t ladder_budget_bytes, 
     }
     return z;
 }
+
+// ============================================================================
+// Placement: where each book's ladder sits and how wide it is
+// ============================================================================
+// prescan    size_books() above: widths and windows from the day's add prices.
+//            It looks ahead in the file, so it is an upper bound, not a feed
+//            handler's policy.
+// first-add  every ladder the same width (uniform_band()), centered on the
+//            symbol's first add, grid $0.01 if that add is at or above $1.00
+//            and $0.0001 below; never moves.
+// causal     every ladder the same width (uniform_band()), and each book
+//            places and moves its own ladder from the messages it has
+//            applied (lob::Recenter, see include/lob/book.hpp): centered on
+//            the first add, then re-centered on the book's midpoint after
+//            kRecenterAfter near-touch misses, grid chosen from the center.
+// In all three, pool and id-map capacities come from the pre-scan's peak
+// resting-order count per symbol: they size memory, and do not change where
+// a price rests.
+enum class Placement { Prescan, FirstAdd, Causal };
+
+inline const char* placement_name(Placement p) {
+    return p == Placement::Prescan ? "prescan" : p == Placement::FirstAdd ? "first-add" : "causal";
+}
+
+inline bool parse_placement(const std::string& s, Placement& p) {
+    if (s == "prescan")   { p = Placement::Prescan;  return true; }
+    if (s == "first-add") { p = Placement::FirstAdd; return true; }
+    if (s == "causal")    { p = Placement::Causal;   return true; }
+    return false;
+}
+
+// Near-touch misses that move a causal ladder. Chosen before any causal run,
+// not fitted to a day: a handful, so that a misplaced ladder is corrected
+// after a few slow adds, and more than one, so that a single stray order near
+// the touch does not move it.
+constexpr uint32_t kRecenterAfter = 8;
+
+// $1.00 in wire units: the causal grid is $0.0001 below it, $0.01 at or above.
+constexpr uint32_t kCoarseFrom = 10'000;
+
+// The widest power of two (64 .. 64 << kMaxK ticks) whose ladders, one per
+// book, fit the budget. Known before the first order message: it needs the
+// number of books and the budget only.
+inline uint32_t uniform_band(uint64_t n_books, uint64_t budget_bytes) {
+    uint32_t band = 64;
+    while (band < (64u << kMaxK) &&
+           static_cast<double>(n_books) * (2.0 * band) * kBytesPerTick <= static_cast<double>(budget_bytes))
+        band *= 2;
+    return band;
+}
+
+// Books, ladders and capacities for one placement. `ladder_mb` receives the
+// ladder memory, `band_out` the uniform width (0 for prescan). For prescan and
+// first-add, Sizing::ladder_adds is the pre-scan's count of the adds the
+// ladder will hold (a prediction the run checks); a causal ladder moves, so
+// it has none.
+inline std::vector<Sizing> plan_books(DayScan& d, Placement pl, uint64_t budget_bytes, double& ladder_mb,
+                                      uint32_t& band_out, uint32_t recenter_after = kRecenterAfter) {
+    uint64_t n_books = 0;
+    for (const SymbolScan& s : d.sym) if (s.order_msgs) ++n_books;
+    band_out = pl == Placement::Prescan ? 0 : uniform_band(n_books, budget_bytes);
+    const uint32_t band = band_out;
+    // First-add: placed from each symbol's first add price, and its coverage
+    // counted, before size_books() sorts the prices.
+    struct Fixed { uint32_t base = 0, tick = 100; uint64_t covered = 0; };
+    std::vector<Fixed> fa(pl == Placement::FirstAdd ? 65536 : 0);
+    for (size_t loc = 0; loc < fa.size(); ++loc) {
+        const std::vector<uint32_t>& v = d.sym[loc].prices;
+        if (v.empty()) continue;                           // no adds: any placement will do
+        Fixed& f = fa[loc];
+        f.tick = v.front() < kCoarseFrom ? 1 : 100;
+        uint64_t start = v.front() / f.tick;
+        start = start >= band / 2 ? start - band / 2 : 0;
+        const uint64_t max_start = ((uint64_t{1} << 32) - uint64_t{band} * f.tick) / f.tick;
+        if (start > max_start) start = max_start;
+        f.base = static_cast<uint32_t>(start * f.tick);
+        for (uint32_t px : v)
+            if (px % f.tick == 0 && px / f.tick >= start && px / f.tick < start + band) ++f.covered;
+    }
+    std::vector<Sizing> z = size_books(d, budget_bytes, ladder_mb);
+    if (pl == Placement::Prescan) return z;
+    uint64_t n = 0;
+    for (int loc = 0; loc < 65536; ++loc) {
+        Sizing& q = z[loc];
+        if (!q.has_book) continue;
+        ++n;
+        q.band = band;
+        if (pl == Placement::Causal) {
+            q.base = 0;
+            q.tick = 100;                                  // the coarse grid; the book picks per center
+            q.ladder_adds = 0;
+            q.recenter_after = recenter_after;
+        } else {
+            q.base = fa[loc].base;
+            q.tick = fa[loc].tick;
+            q.ladder_adds = fa[loc].covered;
+        }
+    }
+    ladder_mb = static_cast<double>(n) * band * kBytesPerTick / 1e6;
+    return z;
+}
+
+inline BookParams book_params(const Sizing& q) {
+    BookParams p{q.base, q.tick, q.band, q.pool, q.idmap_log2};
+    if (q.recenter_after) p.recenter = Recenter{q.recenter_after, kCoarseFrom, 1};
+    return p;
+}
+
+// Moving-ladder counters summed over a set of books.
+struct MoveTotals {
+    uint64_t placements = 0, recenters = 0, levels = 0, orders = 0, grid_changes = 0;
+    void add(const ExactOrderBook& b) {
+        placements += b.placements();
+        recenters += b.recenters();
+        levels += b.move_stats().levels;
+        orders += b.move_stats().orders;
+        grid_changes += b.move_stats().grid_changes;
+    }
+};
 
 // ============================================================================
 // Pass 2 building blocks

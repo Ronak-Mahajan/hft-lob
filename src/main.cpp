@@ -855,6 +855,280 @@ static void replay_fixture() {
     std::printf("\n");
 }
 
+// ============================================================================
+// 8. Moving ladder (causal placement) unit checks
+// ============================================================================
+// Books built with BookParams::recenter (see include/lob/book.hpp): the first
+// add places the ladder, near-touch misses move it. Wire units, 64-tick
+// ladders, $0.01 grid at or above $1.00 and $0.0001 below. After every step
+// the whole book is audited (ExactOrderBook::audit(): bitmap, cached best,
+// every order's level_idx and price, both queues, the id map).
+static void moving_ladder_checks() {
+    std::printf("[8] Moving ladder unit checks (placement, moves with orders at the band edges, "
+                "orders that moved, grid changes, what does not move a ladder)\n");
+    const int before = g_failures;
+    using Lvl = std::pair<uint64_t, uint32_t>;
+    auto fifo = [](const ExactOrderBook& b, Side side, Price px) {
+        std::vector<uint64_t> ids;
+        b.for_each_level(side, [&](Price p, const PriceLevel& L) {
+            if (p != px) return;
+            for (uint32_t i = L.head; i != NIL; i = b.order_at(i).next) ids.push_back(b.order_at(i).id);
+        });
+        return ids;
+    };
+    auto idx = [](const ExactOrderBook& b, uint64_t id) { return b.find_order(id)->level_idx; };
+#define AUDIT(b, what) CHECK((b).audit().empty(), what)
+
+    // (a) Shift up, K = 2: orders resting on both edges of the ladder, an
+    // overflow level that the move brings onto the ladder, and a deep order
+    // that stays in the overflow; then every operation on orders that moved.
+    {
+        ExactOrderBook b(BookParams{0, 100, 64, 1u << 10, 12, Recenter{2, 10'000, 1}});
+        CHECK(b.band() == 0, "a moving ladder starts unplaced");
+        b.add(1, Side::Bid, 1'000'000, 100);                 // $100.00: places the ladder
+        CHECK(b.placements() == 1 && b.recenters() == 0 && b.base() == 996'800 && b.tick() == 100 &&
+              b.band() == 64 && idx(b, 1) == 32 && b.overflow_adds() == 0,
+              "the first add places a 64-tick ladder centered on it");
+        b.add(2, Side::Bid, 996'800, 10);                    // bottom edge (index 0)
+        b.add(3, Side::Bid, 996'800, 20);
+        b.add(4, Side::Ask, 1'003'100, 30);                  // top edge (index 63)
+        b.add(5, Side::Ask, 1'004'000, 40);                  // near-touch miss 1 of 2: overflow
+        b.add(6, Side::Bid, 990'000, 50);                    // 32+ ticks behind the best bid: not counted
+        CHECK(b.recenters() == 0 && b.overflow_adds() == 2 && idx(b, 5) == kOverflowLevel &&
+              idx(b, 2) == 0 && idx(b, 4) == 63, "one near-touch miss and one deep add do not move it");
+        AUDIT(b, "audit before the move");
+        b.add(7, Side::Ask, 1'003'300, 60);                  // near-touch miss 2 of 2: moves, then lands
+        CHECK(b.recenters() == 1 && b.base() == 998'300 && b.overflow_adds() == 2,
+              "the second near-touch miss re-centers on the midpoint $100.155 and lands on the ladder");
+        CHECK(idx(b, 2) == kOverflowLevel && idx(b, 3) == kOverflowLevel,
+              "the bottom-edge level left the ladder for the overflow");
+        CHECK(idx(b, 1) == 17 && idx(b, 4) == 48 && idx(b, 5) == 57 && idx(b, 7) == 50 &&
+              idx(b, 6) == kOverflowLevel,
+              "shifted, imported and newly added orders carry their new ladder index");
+        CHECK(b.level_at(Side::Bid, 996'800) == Lvl(30, 2) &&
+              (fifo(b, Side::Bid, 996'800) == std::vector<uint64_t>{2, 3}),
+              "the level that left keeps its shares, count and queue order");
+        CHECK(b.level_at(Side::Ask, 1'004'000) == Lvl(40, 1), "the imported level keeps its shares");
+        BBO q = b.bbo();
+        CHECK(q.bid_price == 1'000'000 && q.ask_price == 1'003'100, "BBO across the move");
+        AUDIT(b, "audit after the move");
+        b.cancel(2, 4);                                      // partial cancel, moved to the overflow
+        CHECK(b.level_at(Side::Bid, 996'800) == Lvl(26, 2), "partial cancel of an order that left the ladder");
+        b.execute(3, 20);                                    // full execution, moved to the overflow
+        CHECK(b.level_at(Side::Bid, 996'800) == Lvl(6, 1) && b.find_order(3) == nullptr,
+              "full execution of an order that left the ladder");
+        b.replace(2, 8, 1'000'100, 6);                       // overflow -> ladder
+        CHECK(b.level_at(Side::Bid, 996'800) == Lvl(0, 0) && idx(b, 8) == 18 &&
+              b.bbo().bid_price == 1'000'100, "replace of an order that left the ladder, back onto it");
+        b.execute(5, 10);                                    // partial execution, imported
+        CHECK(b.level_at(Side::Ask, 1'004'000) == Lvl(30, 1), "partial execution of an imported order");
+        b.remove(4);                                         // delete, shifted
+        CHECK(b.bbo().ask_price == 1'003'300 && b.bbo().ask_qty == 60, "delete of a shifted best ask");
+        b.replace(5, 9, 1'003'100, 40);                      // replace of an imported order
+        CHECK(idx(b, 9) == 48 && b.bbo().ask_price == 1'003'100 && b.level_at(Side::Ask, 1'004'000) == Lvl(0, 0),
+              "replace of an imported order");
+        b.replace(7, 10, 998'300, 60);                       // shifted order to the new bottom edge
+        CHECK(idx(b, 10) == 0, "replace to the bottom edge of the moved ladder");
+        AUDIT(b, "audit after operations on moved orders");
+        CHECK(b.live_orders() == 5 && b.unknown_id() == 0, "five orders rest, no unknown ids");
+    }
+
+    // (b) Shift down, K = 1: levels that stay move up the ladder (visited top
+    // down), the top-edge level leaves, a two-order level keeps its FIFO.
+    {
+        ExactOrderBook b(BookParams{0, 100, 64, 1u << 10, 12, Recenter{1, 10'000, 1}});
+        b.add(1, Side::Bid, 500'000, 1);                     // places: base 496,800
+        b.add(2, Side::Ask, 500'100, 1);                     // index 33
+        b.add(3, Side::Bid, 496'800, 1);                     // bottom edge
+        b.add(4, Side::Ask, 503'100, 1);                     // top edge
+        b.add(5, Side::Bid, 499'000, 2);                     // index 22, two orders
+        b.add(6, Side::Bid, 499'000, 3);
+        b.remove(1);
+        CHECK(b.base() == 496'800 && b.recenters() == 0 && idx(b, 4) == 63 && idx(b, 3) == 0,
+              "placed at $49.68, edges on indices 0 and 63");
+        b.add(7, Side::Ask, 496'500, 1);                     // better than the best ask: near; moves down 5 ticks
+        CHECK(b.recenters() == 1 && b.base() == 496'300, "a near-touch miss below the ladder moves it down");
+        CHECK(idx(b, 4) == kOverflowLevel && idx(b, 3) == 5 && idx(b, 2) == 38 && idx(b, 5) == 27 &&
+              idx(b, 6) == 27 && idx(b, 7) == 2, "downward shift: the top edge leaves, the rest move up 5");
+        CHECK((fifo(b, Side::Bid, 499'000) == std::vector<uint64_t>{5, 6}) &&
+              b.level_at(Side::Bid, 499'000) == Lvl(5, 2), "a shifted two-order level keeps its queue");
+        AUDIT(b, "audit after a downward shift");
+        b.execute(4, 1);                                     // full execution in the overflow
+        b.cancel(6, 1);
+        b.replace(5, 8, 496'400, 2);
+        CHECK(b.level_at(Side::Bid, 499'000) == Lvl(2, 1) && idx(b, 8) == 1 && b.overflow_levels() == 0,
+              "operations on orders that shifted down");
+        AUDIT(b, "audit after operations on shifted orders");
+    }
+
+    // (c) Grid changes, K = 1: a book above $1.00 on the $0.01 grid falls
+    // below it and moves to the $0.0001 grid (a sub-penny overflow level comes
+    // onto the ladder), then rises again (a sub-penny ladder level leaves).
+    {
+        ExactOrderBook b(BookParams{0, 100, 64, 1u << 10, 12, Recenter{1, 10'000, 1}});
+        b.add(1, Side::Bid, 10'100, 100);                    // $1.01: places on the $0.01 grid
+        b.add(2, Side::Ask, 10'200, 100);
+        b.add(3, Side::Bid, 9'950, 50);                      // $0.9950: off that grid, not counted
+        CHECK(b.tick() == 100 && b.base() == 6'900 && b.recenters() == 0 && idx(b, 3) == kOverflowLevel,
+              "an add off the grid of the would-be center does not count");
+        b.remove(1);
+        b.remove(2);
+        b.add(4, Side::Ask, 9'960, 10);                      // one-sided book, center $0.9960: $0.0001 grid
+        CHECK(b.recenters() == 1 && b.move_stats().grid_changes == 1 && b.tick() == 1 && b.base() == 9'928 &&
+              idx(b, 3) == 22 && idx(b, 4) == 32, "moving below $1.00 switches to the $0.0001 grid");
+        b.add(5, Side::Bid, 9'930, 5);
+        b.add(6, Side::Ask, 9'991, 7);                       // top edge
+        b.add(7, Side::Ask, 10'100, 5);                      // 140 ticks behind the best ask: not counted
+        CHECK(b.recenters() == 1 && idx(b, 6) == 63 && idx(b, 7) == kOverflowLevel,
+              "a deep add past the top edge stays in the overflow");
+        AUDIT(b, "audit on the $0.0001 grid");
+        b.remove(3);
+        b.remove(4);
+        b.remove(5);
+        b.add(8, Side::Bid, 10'000, 5);                      // center $1.00: back to the $0.01 grid
+        CHECK(b.recenters() == 2 && b.move_stats().grid_changes == 2 && b.tick() == 100 && b.base() == 6'800 &&
+              idx(b, 6) == kOverflowLevel && idx(b, 7) == 33 && idx(b, 8) == 32,
+              "moving to $1.00 switches back: $0.9991 leaves the ladder, $1.01 comes onto it");
+        AUDIT(b, "audit after two grid changes");
+        b.remove(6);                                          // an order that left the ladder
+        b.replace(7, 9, 10'200, 5);                          // an order that came onto it
+        CHECK(b.level_at(Side::Ask, 10'200) == Lvl(5, 1) && idx(b, 9) == 34 && b.live_orders() == 2 &&
+              b.overflow_levels() == 0 && b.recenters() == 2, "operations after the grid changes");
+        AUDIT(b, "audit after operations on the $0.01 grid");
+    }
+
+    // (d) What does not move a ladder, and what does, K = 3: stub quotes,
+    // deep orders and sub-penny prices never count; near-touch misses count
+    // until the third; with a spread wider than half the ladder the move
+    // centers on the add, and the bid that falls out of the window leaves.
+    {
+        ExactOrderBook b(BookParams{0, 100, 64, 1u << 10, 12, Recenter{3, 10'000, 1}});
+        b.add(1, Side::Bid, 1'000'000, 1);
+        b.add(2, Side::Ask, 1'000'100, 1);
+        b.add(3, Side::Ask, 1'999'999'900, 1);               // stub ask
+        b.add(4, Side::Bid, 100, 1);                         // stub bid
+        b.add(5, Side::Bid, 900'000, 1);                     // deep bid
+        b.add(6, Side::Bid, 1'000'050, 1);                   // sub-penny above $1.00
+        CHECK(b.recenters() == 0 && b.overflow_adds() == 4, "stubs, deep orders and sub-penny prices do not count");
+        b.remove(2);                                          // best ask is now the stub: spread too wide
+        b.add(7, Side::Ask, 1'005'000, 1);                   // near-touch miss 1
+        b.add(8, Side::Ask, 1'005'100, 1);                   // 2
+        CHECK(b.recenters() == 0 && idx(b, 7) == kOverflowLevel, "two near-touch misses of three do not move it");
+        b.add(9, Side::Ask, 1'005'200, 1);                   // 3: centers on this add
+        CHECK(b.recenters() == 1 && b.base() == 1'002'000 && idx(b, 1) == kOverflowLevel && idx(b, 7) == 30 &&
+              idx(b, 8) == 31 && idx(b, 9) == 32, "the third moves it, centered on the add");
+        AUDIT(b, "audit after a move centered on the add");
+    }
+#undef AUDIT
+    std::printf("  %s\n\n", g_failures == before ? "all passed" : "FAILURES ABOVE");
+}
+
+// ============================================================================
+// 9. Moving ladder fuzz vs ref::Market
+// ============================================================================
+// Generated streams whose prices drift (WireGen::set_drift), through books
+// whose ladders move (every combination of 64 or 256 ticks and K = 1, 2 or 8
+// near-touch misses), including a symbol that crosses $1.00 and one whose
+// window is clamped at the top of the price range. After every order message
+// the book is compared with ref::Market on what the message touched
+// (diff_touch), every 1,000 messages it is audited, and every n / 40 messages
+// every book is compared in full.
+static void moving_ladder_fuzz(size_t n_msgs) {
+    const std::vector<WireSymbol> syms = {
+        {10,    "MOV",  1'000'000,       100, 256},
+        {11,    "PENY", 9'900,           1,   256},     // crosses $1.00 both ways
+        {12,    "DIME", 10'050,          100, 64},      // starts above $1.00, drifts across
+        {13,    "TOPP", 4'294'000'000u,  100, 64},      // the ladder clamps at the top of u32
+        {14,    "LOWW", 700,             1,   128},     // the ladder clamps at $0
+        {60000, "WIDE", 250'000,         100, 1024},
+    };
+    const uint32_t widths[] = {64, 256};
+    const uint32_t ks[] = {1, 2, 8};
+    std::printf("[9] Moving ladder fuzz: %zu drifting wire-unit messages x 6 ladder configurations, "
+                "%zu symbols, vs ref::Market\n", n_msgs, syms.size());
+    uint64_t total_moves = 0, total_grid = 0, total_orders = 0, total_msgs = 0, mismatches = 0, audits_bad = 0;
+    TouchTotals touched;
+    for (uint32_t w : widths) {
+        for (uint32_t k : ks) {
+            WireGen gen(0xC0FFEEull + w * 31 + k, syms, 20'000);
+            gen.set_drift(3);
+            gen.generate(n_msgs);
+            std::vector<std::unique_ptr<ExactOrderBook>> books(65536);
+            for (const WireSymbol& s : syms)
+                books[s.locate] = std::make_unique<ExactOrderBook>(
+                    BookParams{0, 100, w, 1u << 16, 17, Recenter{k, 10'000, 1}});
+            ref::Market refm;
+            uint64_t msgs = 0, bad_length = 0;
+            DiffTotals tot;
+            const uint64_t every = std::max<uint64_t>(1, n_msgs / 40);
+            auto full = [&] {
+                for (const WireSymbol& s : syms) {
+                    std::string d = diff_book(*books[s.locate], refm, s.locate, tot);
+                    if (!d.empty() && ++mismatches <= 5)
+                        std::printf("  width %u K %u, mismatch after message %llu, %s: %s\n", w, k,
+                                    (unsigned long long)msgs, s.name.c_str(), d.c_str());
+                }
+            };
+            auto audit = [&] {
+                for (const WireSymbol& s : syms) {
+                    std::string d = books[s.locate]->audit();
+                    if (!d.empty() && ++audits_bad <= 5)
+                        std::printf("  width %u K %u, audit after message %llu, %s: %s\n", w, k,
+                                    (unsigned long long)msgs, s.name.c_str(), d.c_str());
+                }
+            };
+            const uint8_t* p   = gen.bytes.data();
+            const uint8_t* end = p + gen.bytes.size();
+            while (p + 2 <= end) {
+                uint16_t len = static_cast<uint16_t>((p[0] << 8) | p[1]);
+                const uint8_t* m = p + 2;
+                if (static_cast<size_t>(end - m) < len) break;
+                const Touch t = touch_before(refm, m, len);
+                if (len >= 3) {
+                    uint16_t loc = static_cast<uint16_t>((m[1] << 8) | m[2]);
+                    if (books[loc]) itch::dispatch_checked<itch::WireUnits>(*books[loc], m, len, bad_length);
+                }
+                refm.on_message(m, len);
+                if (t.check) {
+                    std::string d = diff_touch(*books[t.locate], refm, t, touched);
+                    if (!d.empty() && ++mismatches <= 5)
+                        std::printf("  width %u K %u, after message %llu (%c): %s\n", w, k,
+                                    (unsigned long long)msgs, static_cast<char>(t.type), d.c_str());
+                }
+                p += 2 + len;
+                ++msgs;
+                if (msgs % 1000 == 0) audit();
+                if (msgs % every == 0) full();
+            }
+            full();
+            audit();
+            uint64_t moves = 0, grid = 0, relinked = 0, unknown = 0;
+            for (const WireSymbol& s : syms) {
+                moves += books[s.locate]->recenters();
+                grid += books[s.locate]->move_stats().grid_changes;
+                relinked += books[s.locate]->move_stats().orders;
+                unknown += books[s.locate]->unknown_id();
+            }
+            CHECK(bad_length == 0 && unknown == 0 && refm.counters().unknown_ref == 0,
+                  "moving ladder fuzz: no bad lengths, no unknown ids");
+            total_moves += moves;
+            total_grid += grid;
+            total_orders += relinked;
+            total_msgs += msgs;
+        }
+    }
+    CHECK(mismatches == 0, "moving ladders match ref::Market");
+    CHECK(audits_bad == 0, "moving ladders pass every audit");
+    CHECK(total_moves >= 1000 && total_grid >= 10 && total_orders >= 10'000,
+          "the fuzz moves ladders often, across grids, with orders resting");
+    std::printf("  %llu messages, %llu checked after the message, %llu ladder moves (%llu onto a new grid), "
+                "%llu orders relinked, %llu mismatches, %llu failed audits - %s\n\n",
+                (unsigned long long)total_msgs, (unsigned long long)touched.messages,
+                (unsigned long long)total_moves, (unsigned long long)total_grid,
+                (unsigned long long)total_orders, (unsigned long long)mismatches,
+                (unsigned long long)audits_bad, mismatches == 0 && audits_bad == 0 ? "PASS" : "FAIL");
+}
+
 int main(int argc, char** argv) {
     bool quick = false;
     unsigned cpu = 2;
@@ -882,6 +1156,8 @@ int main(int argc, char** argv) {
     exact_book_checks();
     exact_book_fuzz(quick ? 200'000 : 2'000'000);
     replay_fixture();
+    moving_ladder_checks();
+    moving_ladder_fuzz(quick ? 100'000 : 1'000'000);
 
     if (g_failures) { std::printf("*** %d FAILURE(S) ***\n", g_failures); return 1; }
     std::printf("All verification passed.\n");
