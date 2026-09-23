@@ -717,6 +717,11 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
     std::fflush(stdout);
 
     std::vector<Hist> hist(kSlots);
+    // Causal placement: the messages that placed or moved a ladder, found
+    // after the timer stops by comparing each book's move count with a copy.
+    const bool causal = day.placement == Placement::Causal;
+    Hist moved;
+    std::vector<uint64_t> moves_seen(65536, 0);
     ChunkReader rd(o.path.c_str(), o.chunk);
     EndState e;
     std::vector<uint64_t> chunk_min;                       // empty-pair minimum after each chunk
@@ -733,15 +738,21 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
             const uint16_t len = static_cast<uint16_t>((p[0] << 8) | p[1]);
             const uint8_t* m = p + 2;
             if (LOB_UNLIKELY(static_cast<size_t>(end - m) < len)) break;
+            ExactOrderBook* b = nullptr;
             const uint64_t c0 = rdtsc_begin();
             if (LOB_LIKELY(len >= 3)) {
-                ExactOrderBook* b = books[(m[1] << 8) | m[2]];
+                b = books[(m[1] << 8) | m[2]];
                 if (b) itch::dispatch_checked<itch::WireUnits>(*b, m, len, e.bad_length);
             } else {
                 ++e.bad_length;
             }
             const uint64_t c1 = rdtsc_end();
             hist[slot_of[len ? m[0] : 0]].add(c1 - c0);  // raw; the overhead is subtracted at the end
+            if (causal && b) {
+                const uint64_t mv = b->recenters() + b->placements();
+                uint64_t& seen = moves_seen[(m[1] << 8) | m[2]];
+                if (mv != seen) { seen = mv; moved.add(c1 - c0); }
+            }
             p = m + len;
             ++e.messages;
         }
@@ -772,6 +783,7 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
     for (Hist& h : hist) h.finish();
     order.finish();
     all.finish();
+    moved.finish();
     std::printf("\nresult (per-message latency, cpu %u; chunk times above include the timers and are "
                 "not throughput)\n", cpu);
     std::printf("  TSC over the whole pass (%.1f s): %.6f GHz; ns = cycles / %.6f\n",
@@ -807,6 +819,14 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
         for (int s = 0; s < kSlots; ++s) row(kSlotName[s], hist[s], unit == 1);
         row("orders", order, unit == 1);
         row("all", all, unit == 1);
+    }
+    if (causal) {
+        auto ns = [&](uint64_t raw) { return static_cast<double>(raw > ovh ? raw - ovh : 0) / ghz; };
+        std::printf("\n  messages that placed or moved a ladder (included in the rows above): %s | p50 %.0f | "
+                    "p90 %.0f | p99 %.0f | max %.0f ns\n",
+                    num(moved.n).c_str(), moved.n ? ns(moved.quantile(0.50)) : 0.0,
+                    moved.n ? ns(moved.quantile(0.90)) : 0.0, moved.n ? ns(moved.quantile(0.99)) : 0.0,
+                    moved.n ? ns(moved.max()) : 0.0);
     }
     std::printf("\n");
     return print_end(day, e) ? 0 : 1;
