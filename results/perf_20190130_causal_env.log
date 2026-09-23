@@ -1,0 +1,9 @@
+Environment for the perf_20190130_causal_*.log runs and replay_20190130_causal_differential.log.
+--- build (source commit b8ea69f059225ae816bb683c0fb57aeade1746b6, clean tree)
+g++.exe (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r4) 16.1.0
+++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="b8ea69f059225ae816bb683c0fb57aeade1746b6"' '-DLOB_BUILD_FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include"' src/perf_main.cpp -o ../../bin/lob_perf.exe
+++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY '-DLOB_GIT_COMMIT="b8ea69f059225ae816bb683c0fb57aeade1746b6"' '-DLOB_BUILD_FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY"' src/perf_main.cpp -o ../../bin/lob_perf_latency.exe
+++ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include '-DLOB_GIT_COMMIT="b8ea69f059225ae816bb683c0fb57aeade1746b6"' src/replay_main.cpp -o ../../bin/lob_replay.exe
+++ set +x
+Wed Sep 23 10:12:02 CDT 2026 start replay_causal_differential (on 1 battery status; correctness run, not timed)
+Wed Sep 23 10:35:35 CDT 2026 end replay_causal_differential
