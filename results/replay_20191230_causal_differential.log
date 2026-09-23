@@ -1,0 +1,200 @@
+=== lob_replay: NASDAQ TotalView-ITCH 5.0 day replay with ref::Market differential ===
+run: 2026-09-23 10:36:58 local | cpu: Intel(R) Core(TM) Ultra 7 265H | compiler: g++ 16.1.0
+command: lob_replay 12302019.NASDAQ_ITCH50 --differential --placement causal --symbols AAPL,MSFT,AMZN,BKNG
+source: git commit b8ea69f059225ae816bb683c0fb57aeade1746b6
+file: 12302019.NASDAQ_ITCH50
+chunk 268,435,456 bytes | checkpoint every 5,000,000 messages | ladder budget 1,024 MB | placement causal
+
+[1] pre-scan (untimed, 161.2 s)
+  bytes 8,251,407,909 | messages 268,744,780 | trailing bytes 0
+  message counts by type:
+     A   117,145,568    C        99,917    D   114,360,997    E     5,722,824
+     F     1,485,888    H         8,966    I     4,024,315    J            34
+     K             3    L       215,161    P     1,218,602    Q        17,836
+     R         8,906    S             6    U    21,639,067    V             1
+     X     2,787,676    Y         9,013
+  bad_length 0 | unknown type 0
+  first message 03:04:32.057 | last message 20:05:00.000 (ET, from message timestamps) | timestamps out of order 0
+  stock directory: 8,906 'R' messages for 8,906 stock_locates (0 repeated, 0 renamed) | locates with order messages: 8,892
+  adds (A, F and the add half of U): 140,270,523 | peak resting orders, whole market: 1,924,078
+  add prices that are not whole cents: 656,931 | outside $0.01..$1310.72: 1,159,036
+  sizing (10.1 s): 8,892 books | grid $0.01: 8,892, grid $0.0001: 0 | ladder 879 MB | band ticks min 2,048 median 2,048 max 2,048
+  placement causal: every ladder 2,048 ticks; each book centers it on its first add and re-centers it on its midpoint after 8 near-touch misses, grid $0.01 at or above $1.00 and $0.0001 below, from the messages already applied (grids and bands above are before the first add)
+  adds the ladders cover: not predicted, the ladders move
+  pools 2,482,926 order slots (79 MB) | id maps 7,139,520 slots (114 MB)
+
+  named symbols (Stock Directory, and the 'Q' crosses NASDAQ ran):
+  AAPL   locate 13    adds 795,712 | peak resting 27,110 | ladder 2,048 ticks, placed by the book
+         opening cross 289.4400 x 269,367 shares at 09:30:00.776
+         closing cross 291.5200 x 1,335,177 shares at 16:00:00.473
+  MSFT   locate 5291  adds 630,899 | peak resting 23,005 | ladder 2,048 ticks, placed by the book
+         opening cross 158.9900 x 220,504 shares at 09:30:00.829
+         closing cross 157.5900 x 2,279,904 shares at 16:00:00.797
+  AMZN   locate 393   adds 287,475 | peak resting 37,068 | ladder 2,048 ticks, placed by the book
+         opening cross 1874.0000 x 38,093 shares at 09:30:00.021
+         closing cross 1846.8900 x 136,244 shares at 16:00:00.290
+  BKNG   locate 903   adds 49,844 | peak resting 1,417 | ladder 2,048 ticks, placed by the book
+         opening cross 2075.3600 x 2,142 shares at 09:30:00.588
+         closing cross 2053.8700 x 15,820 shares at 16:00:00.593
+
+[2] replay, differential against ref::Market after every message and in full at every checkpoint | thread pinned to cpu 2
+  checkpoint   1 | message     5,000,000 | 09:23:35.668 | books 8,892 | levels 148,460 | orders 231,866 | mismatches 0
+  chunk   1 | messages     7,844,756 | book digest 7e6be98cad5b8c9d
+  checkpoint   2 | message    10,000,000 | 09:32:05.842 | books 8,892 | levels 698,013 | orders 1,629,240 | mismatches 0
+  checkpoint   3 | message    15,000,000 | 09:37:00.872 | books 8,892 | levels 721,466 | orders 1,672,413 | mismatches 0
+  chunk   2 | messages    16,417,411 | book digest f1387ab47cf88f64
+  checkpoint   4 | message    20,000,000 | 09:41:26.483 | books 8,892 | levels 728,146 | orders 1,681,261 | mismatches 0
+  checkpoint   5 | message    25,000,000 | 09:46:11.089 | books 8,892 | levels 721,487 | orders 1,675,597 | mismatches 0
+  chunk   3 | messages    25,214,517 | book digest 04e1373b7d95e09f
+  checkpoint   6 | message    30,000,000 | 09:50:35.595 | books 8,892 | levels 726,720 | orders 1,692,041 | mismatches 0
+  chunk   4 | messages    34,028,039 | book digest db9637b11740c1fd
+  checkpoint   7 | message    35,000,000 | 09:55:17.854 | books 8,892 | levels 727,610 | orders 1,704,695 | mismatches 0
+  checkpoint   8 | message    40,000,000 | 10:00:25.030 | books 8,892 | levels 722,907 | orders 1,686,579 | mismatches 0
+  chunk   5 | messages    42,858,500 | book digest 866979044d7634b0
+  checkpoint   9 | message    45,000,000 | 10:05:19.672 | books 8,892 | levels 734,860 | orders 1,724,007 | mismatches 0
+  checkpoint  10 | message    50,000,000 | 10:10:40.772 | books 8,892 | levels 735,560 | orders 1,727,130 | mismatches 0
+  chunk   6 | messages    51,704,315 | book digest c572635363487cfc
+  checkpoint  11 | message    55,000,000 | 10:14:27.507 | books 8,892 | levels 736,460 | orders 1,724,741 | mismatches 0
+  checkpoint  12 | message    60,000,000 | 10:18:49.224 | books 8,892 | levels 737,565 | orders 1,729,949 | mismatches 0
+  chunk   7 | messages    60,552,491 | book digest 9ad96eacf72add33
+  checkpoint  13 | message    65,000,000 | 10:24:06.021 | books 8,892 | levels 738,268 | orders 1,732,925 | mismatches 0
+  chunk   8 | messages    69,406,748 | book digest 42f31dd60eca18ae
+  checkpoint  14 | message    70,000,000 | 10:29:40.170 | books 8,892 | levels 738,829 | orders 1,736,118 | mismatches 0
+  checkpoint  15 | message    75,000,000 | 10:35:00.571 | books 8,892 | levels 741,748 | orders 1,743,880 | mismatches 0
+  chunk   9 | messages    78,263,068 | book digest 7fcc1b7ee4067370
+  checkpoint  16 | message    80,000,000 | 10:41:03.226 | books 8,892 | levels 741,961 | orders 1,746,900 | mismatches 0
+  checkpoint  17 | message    85,000,000 | 10:47:44.445 | books 8,892 | levels 742,720 | orders 1,750,114 | mismatches 0
+  chunk  10 | messages    87,116,113 | book digest cdc406f58d05714e
+  checkpoint  18 | message    90,000,000 | 10:54:29.054 | books 8,892 | levels 742,926 | orders 1,751,882 | mismatches 0
+  checkpoint  19 | message    95,000,000 | 11:00:52.204 | books 8,892 | levels 745,896 | orders 1,757,329 | mismatches 0
+  chunk  11 | messages    95,970,490 | book digest 90eb2a55d55fd087
+  checkpoint  20 | message   100,000,000 | 11:07:01.954 | books 8,892 | levels 746,526 | orders 1,759,999 | mismatches 0
+  chunk  12 | messages   104,816,411 | book digest 4d705f03431ef2c8
+  checkpoint  21 | message   105,000,000 | 11:13:40.001 | books 8,892 | levels 746,961 | orders 1,761,933 | mismatches 0
+  checkpoint  22 | message   110,000,000 | 11:21:01.887 | books 8,892 | levels 748,033 | orders 1,765,151 | mismatches 0
+  chunk  13 | messages   113,659,597 | book digest 20ddfc836c533588
+  checkpoint  23 | message   115,000,000 | 11:28:35.950 | books 8,892 | levels 748,177 | orders 1,766,229 | mismatches 0
+  checkpoint  24 | message   120,000,000 | 11:35:23.803 | books 8,892 | levels 748,277 | orders 1,765,455 | mismatches 0
+  chunk  14 | messages   122,512,104 | book digest fa80ae7fc1013ee4
+  checkpoint  25 | message   125,000,000 | 11:43:48.844 | books 8,892 | levels 748,955 | orders 1,767,286 | mismatches 0
+  checkpoint  26 | message   130,000,000 | 11:51:41.260 | books 8,892 | levels 749,513 | orders 1,769,113 | mismatches 0
+  chunk  15 | messages   131,356,374 | book digest 8bee059c48ffce7b
+  checkpoint  27 | message   134,508,460 | 11:59:59.999 | books 8,892 | levels 749,671 | orders 1,771,377 | mismatches 0
+  books at 12:00:00.000 ET (state after message 134,508,460):
+  AAPL   locate 13    resting 21,657 | levels bid 3749 ask 971 | overflow levels 3,789 | BBO 290.4500 x 200 / 290.4900 x 100
+         bid     290.4500        200 (   2)   | ask     290.4900        100 (   1)
+         bid     290.4400        100 (   1)   | ask     290.5000        700 (   3)
+         bid     290.4300        200 (   2)   | ask     290.5100        110 (   2)
+         bid     290.4200        400 (   3)   | ask     290.5200        100 (   1)
+         bid     290.4100        200 (   2)   | ask     290.5300        300 (   3)
+  MSFT   locate 5291  resting 19,256 | levels bid 2780 ask 751 | overflow levels 2,494 | BBO 157.7400 x 125 / 157.7500 x 1,221
+         bid     157.7400        125 (   2)   | ask     157.7500      1,221 (  12)
+         bid     157.7300        645 (   5)   | ask     157.7600      1,103 (   9)
+         bid     157.7200      1,200 (   7)   | ask     157.7700      1,536 (  12)
+         bid     157.7100        801 (   9)   | ask     157.7800      1,130 (  10)
+         bid     157.7000        935 (  12)   | ask     157.7900      1,000 (   9)
+  AMZN   locate 393   resting 30,848 | levels bid 2606 ask 2194 | overflow levels 4,547 | BBO 1843.3400 x 100 / 1843.8500 x 100
+         bid    1843.3400        100 (   1)   | ask    1843.8500        100 (   1)
+         bid    1843.3300         13 (   2)   | ask    1843.8600        100 (   1)
+         bid    1843.2700          4 (   1)   | ask    1843.9100          2 (   1)
+         bid    1843.2500          2 (   1)   | ask    1844.0000         48 (   3)
+         bid    1843.2200        100 (   1)   | ask    1844.1100        100 (   1)
+  BKNG   locate 903   resting 1,167 | levels bid 326 ask 191 | overflow levels 472 | BBO 2059.1000 x 1 / 2060.4600 x 1
+         bid    2059.1000          1 (   1)   | ask    2060.4600          1 (   1)
+         bid    2059.0100         10 (   1)   | ask    2060.8600          2 (   1)
+         bid    2058.6600         12 (   2)   | ask    2060.9100          2 (   2)
+         bid    2058.5200          1 (   1)   | ask    2060.9400          2 (   1)
+         bid    2058.0300          2 (   1)   | ask    2061.1800        100 (   1)
+  checkpoint  28 | message   135,000,000 | 12:00:48.322 | books 8,892 | levels 750,086 | orders 1,772,108 | mismatches 0
+  checkpoint  29 | message   140,000,000 | 12:10:13.180 | books 8,892 | levels 754,749 | orders 1,783,096 | mismatches 0
+  chunk  16 | messages   140,199,743 | book digest adce77c3a68543df
+  checkpoint  30 | message   145,000,000 | 12:19:57.402 | books 8,892 | levels 755,039 | orders 1,785,065 | mismatches 0
+  chunk  17 | messages   149,039,162 | book digest de113b7eafdd4bb5
+  checkpoint  31 | message   150,000,000 | 12:29:57.421 | books 8,892 | levels 755,856 | orders 1,786,461 | mismatches 0
+  checkpoint  32 | message   155,000,000 | 12:39:58.564 | books 8,892 | levels 755,710 | orders 1,787,284 | mismatches 0
+  chunk  18 | messages   157,887,683 | book digest 0e4956258a954534
+  checkpoint  33 | message   160,000,000 | 12:50:59.916 | books 8,892 | levels 756,342 | orders 1,789,576 | mismatches 0
+  checkpoint  34 | message   165,000,000 | 13:01:55.870 | books 8,892 | levels 756,450 | orders 1,790,270 | mismatches 0
+  chunk  19 | messages   166,732,070 | book digest 94b40dc1734fad1c
+  checkpoint  35 | message   170,000,000 | 13:11:45.334 | books 8,892 | levels 756,079 | orders 1,789,443 | mismatches 0
+  checkpoint  36 | message   175,000,000 | 13:22:28.226 | books 8,892 | levels 756,793 | orders 1,791,811 | mismatches 0
+  chunk  20 | messages   175,579,926 | book digest a9c5e8e8ec862378
+  checkpoint  37 | message   180,000,000 | 13:33:34.482 | books 8,892 | levels 756,968 | orders 1,793,525 | mismatches 0
+  chunk  21 | messages   184,417,901 | book digest cb722345ea4da4ab
+  checkpoint  38 | message   185,000,000 | 13:45:19.036 | books 8,892 | levels 757,261 | orders 1,796,272 | mismatches 0
+  checkpoint  39 | message   190,000,000 | 13:56:19.980 | books 8,892 | levels 757,223 | orders 1,795,799 | mismatches 0
+  chunk  22 | messages   193,257,277 | book digest 32dbe8ac0a83e6ff
+  checkpoint  40 | message   195,000,000 | 14:05:44.254 | books 8,892 | levels 753,781 | orders 1,789,338 | mismatches 0
+  checkpoint  41 | message   200,000,000 | 14:17:00.365 | books 8,892 | levels 753,852 | orders 1,791,444 | mismatches 0
+  chunk  23 | messages   202,093,136 | book digest cad660bc0b837353
+  checkpoint  42 | message   205,000,000 | 14:28:07.652 | books 8,892 | levels 754,001 | orders 1,790,392 | mismatches 0
+  checkpoint  43 | message   210,000,000 | 14:38:28.127 | books 8,892 | levels 754,616 | orders 1,792,935 | mismatches 0
+  chunk  24 | messages   210,920,912 | book digest c0a44e385af98498
+  checkpoint  44 | message   215,000,000 | 14:49:12.635 | books 8,892 | levels 754,497 | orders 1,793,529 | mismatches 0
+  chunk  25 | messages   219,754,889 | book digest 1e32d1e500621984
+  checkpoint  45 | message   220,000,000 | 15:00:02.743 | books 8,892 | levels 753,693 | orders 1,791,679 | mismatches 0
+  checkpoint  46 | message   225,000,000 | 15:08:51.267 | books 8,892 | levels 753,442 | orders 1,792,052 | mismatches 0
+  chunk  26 | messages   228,586,572 | book digest aaa0668518a00ecb
+  checkpoint  47 | message   230,000,000 | 15:18:58.041 | books 8,892 | levels 755,140 | orders 1,801,644 | mismatches 0
+  checkpoint  48 | message   235,000,000 | 15:28:29.205 | books 8,892 | levels 763,659 | orders 1,832,931 | mismatches 0
+  chunk  27 | messages   237,390,199 | book digest 61203766b21bf7fe
+  checkpoint  49 | message   240,000,000 | 15:36:08.132 | books 8,892 | levels 756,772 | orders 1,820,555 | mismatches 0
+  checkpoint  50 | message   245,000,000 | 15:44:07.436 | books 8,892 | levels 760,109 | orders 1,835,051 | mismatches 0
+  chunk  28 | messages   246,192,268 | book digest 4089f5fa263f1603
+  checkpoint  51 | message   250,000,000 | 15:50:07.098 | books 8,892 | levels 772,883 | orders 1,865,402 | mismatches 0
+  chunk  29 | messages   254,768,744 | book digest a7709cd264906035
+  checkpoint  52 | message   255,000,000 | 15:55:00.258 | books 8,892 | levels 770,066 | orders 1,883,281 | mismatches 0
+  checkpoint  53 | message   260,000,000 | 15:57:57.067 | books 8,892 | levels 771,677 | orders 1,912,093 | mismatches 0
+  chunk  30 | messages   262,071,034 | book digest 9021568b8a229f5e
+  checkpoint  54 | message   265,000,000 | 15:59:51.203 | books 8,892 | levels 749,469 | orders 1,847,664 | mismatches 0
+  checkpoint  55 | message   265,920,781 | 15:59:59.999 | books 8,892 | levels 724,322 | orders 1,758,807 | mismatches 0
+  books at 16:00:00.000 ET (state after message 265,920,781):
+  AAPL   locate 13    resting 27,106 | levels bid 4219 ask 1097 | overflow levels 4,189 | BBO 291.6300 x 7,188 / 291.7300 x 200
+         bid     291.6300      7,188 (   3)   | ask     291.7300        200 (   2)
+         bid     291.6200      1,400 (   2)   | ask     291.7400      3,871 (   3)
+         bid     291.6100      2,000 (   4)   | ask     291.7500      1,400 (   2)
+         bid     291.6000        260 (   2)   | ask     291.7600        100 (   1)
+         bid     291.5900        100 (   1)   | ask     291.7700      1,979 (   3)
+  MSFT   locate 5291  resting 22,957 | levels bid 2961 ask 847 | overflow levels 2,662 | BBO 157.6400 x 7,860 / 157.6800 x 1,362
+         bid     157.6400      7,860 (   2)   | ask     157.6800      1,362 (   2)
+         bid     157.6300      3,300 (   2)   | ask     157.6900      2,700 (   2)
+         bid     157.6200     13,300 (   5)   | ask     157.7000        548 (   4)
+         bid     157.6100        300 (   2)   | ask     157.7100        201 (   2)
+         bid     157.6000     14,239 (   9)   | ask     157.7200      3,691 (   3)
+  AMZN   locate 393   resting 37,068 | levels bid 3060 ask 2548 | overflow levels 5,227 | BBO 1847.1800 x 56 / 1847.1900 x 896
+         bid    1847.1800         56 (   1)   | ask    1847.1900        896 (   3)
+         bid    1847.1700         99 (   1)   | ask    1847.2000        300 (   2)
+         bid    1846.8900        100 (   1)   | ask    1847.3200          4 (   1)
+         bid    1846.8600         35 (   2)   | ask    1847.3500        433 (   1)
+         bid    1846.8500        100 (   1)   | ask    1847.3700        200 (   1)
+  BKNG   locate 903   resting 1,417 | levels bid 384 ask 248 | overflow levels 542 | BBO 2053.8800 x 145 / 2054.4800 x 86
+         bid    2053.8800        145 (   2)   | ask    2054.4800         86 (   1)
+         bid    2053.8700        100 (   1)   | ask    2054.9300          4 (   1)
+         bid    2053.7600        100 (   1)   | ask    2055.0900         80 (   1)
+         bid    2053.5900        100 (   1)   | ask    2055.2300        207 (   1)
+         bid    2053.3900        100 (   1)   | ask    2055.2800        108 (   1)
+  checkpoint  56 | message   268,744,780 | 20:05:00.000 | books 8,892 | levels 0 | orders 0 | mismatches 0 (end of file)
+  chunk  31 | messages   268,744,780 | book digest 11ff00a1a92507d2
+
+[3] totals
+  messages: pass 1 268,744,780 | pass 2 268,744,780 | trailing bytes 0
+  chunks 31 | chunk boundaries inside a message 29 (inside its length prefix 2)
+  books: 8,892 | resting orders at end of file: 0
+  bad_length: pre-scan 0, dispatch 0 | dropped_out_of_band 0 | unknown order id 0
+  adds on the ladder 136,337,584 | in the overflow 3,932,939 (2.804% of 140,270,523; sizing predicted nothing, the ladders move)
+  causal ladders: placed 8,892 | re-centered 21,743 times | levels moved 696,294 | orders relinked 1,666,814
+  reference applied: A 117,145,568  F 1,485,888  E 5,722,824  C 99,917  X 2,787,676  D 114,360,997  U 21,639,067
+  reference anomalies: unknown ref 0 | duplicate ref 0 | over-execution 0 | locate mismatch 0 | bad side 0 | bad length 0
+  checkpoints 56 | book comparisons 497,952 | levels compared 40,488,250 | orders compared in queue order 95,784,717 | mismatches 0
+  after every order message: 263,241,937 messages checked (resting count and BBO of the book, the orders and price levels the message touched) | orders compared 284,881,004 | levels compared 284,881,004 | mismatches 0
+  dispatch time 253.321 s for 268,744,780 messages (942.6 ns/msg) - differential run: not a measurement
+  final books (end of file):
+  AAPL   locate 13    resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  MSFT   locate 5291  resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  AMZN   locate 393   resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  BKNG   locate 903   resting 0 | levels bid 0 ask 0 | overflow levels 0 | BBO - / -
+  book digest chain over 31 chunk boundaries: 79026a67a5e5fe07
+  wall time 1166 s
+
+RESULT: PASS
+exit 0
