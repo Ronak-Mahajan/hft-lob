@@ -30,12 +30,19 @@
 // (books_digest() in src/replay_day.hpp); lob_perf prints the same digests,
 // so its runs can be checked against this one.
 //
+// --placement picks where the ladders sit (plan_books() in src/replay_day.hpp):
+// prescan (the default) sizes and places them from pass 1; first-add fixes
+// each on the symbol's first add; causal lets each book place and move its own
+// ladder from the messages it has already applied (lob::Recenter in
+// include/lob/book.hpp). The books must come out the same under all three.
+//
 // The run itself is replay() in src/replay_run.hpp; this file is the command
 // line and the two built-in tests.
 //
 // Usage:
 //   lob_replay FILE [--differential] [--checkpoint N] [--at HH:MM:SS[,...]]
 //              [--symbols A,B,...] [--depth N] [--chunk-mb N] [--ladder-mb N]
+//              [--placement prescan|first-add|causal] [--recenter-after N]
 //              [--cpu N]
 //   lob_replay --fixture      crafted 65-message file (src/replay_fixture.hpp):
 //                             sub-penny prices, prices far outside every
@@ -43,7 +50,10 @@
 //                             chunks from 1 byte up, differential after every
 //                             message, and the expected books written out
 //   lob_replay --selftest     generated 40-symbol day through 4 KB chunks,
-//                             differential on
+//                             differential on; then a generated day whose
+//                             prices drift (some across $1.00) with causal
+//                             ladders 64 ticks wide that move after 2
+//                             near-touch misses, differential on
 // ---------------------------------------------------------------------------
 #include <algorithm>
 #include <cstdint>
@@ -96,7 +106,51 @@ int selftest() {
     o.command = "lob_replay --selftest";
     int rc = replay(o);
     std::remove(path);
-    return rc;
+    if (rc != 0) return rc;
+
+    // Part 2: moving ladders. Prices drift, so the ladders must follow them;
+    // a 64-tick ladder that moves after 2 near-touch misses moves hundreds
+    // of times, with orders resting at and past both edges, and every one of
+    // those moves is checked by the differential after the message that
+    // caused it.
+    std::printf("\n");
+    std::vector<WireSymbol> drift;
+    const uint32_t dbases[] = {1'000'000, 9'836, 250'000, 5'000, 16'000'000, 9'500, 42'000'000, 700};
+    for (uint16_t i = 0; i < 16; ++i) {
+        const uint32_t base = dbases[i % 8] + 100 * i;
+        const uint32_t tick = base < 10'000 ? 1 : 100;
+        drift.push_back({static_cast<uint16_t>(3 + i * 977), "DRF" + std::to_string(i), base, tick,
+                         static_cast<uint32_t>(64u << (i % 4))});
+    }
+    WireGen g2(0xD81F7ull, drift, 20'000);
+    g2.set_drift(2);
+    g2.generate(1'000'000);
+    const char* path2 = "lob_replay_selftest_causal.itch";
+    f = std::fopen(path2, "wb");
+    if (!f || std::fwrite(g2.bytes.data(), 1, g2.bytes.size(), f) != g2.bytes.size()) {
+        std::printf("selftest: cannot write %s\n", path2);
+        return 2;
+    }
+    std::fclose(f);
+    ReplayOptions c = o;
+    c.path = path2;
+    c.symbols = {"DRF0", "DRF1", "DRF5"};
+    c.ladder_mb = 0;                     // the narrowest uniform ladder: 64 ticks
+    c.placement = Placement::Causal;
+    c.recenter_after = 2;
+    c.command = "lob_replay --selftest (part 2: causal ladders)";
+    ReplayReport rep;
+    rc = replay(c, &rep);
+    std::remove(path2);
+    if (rc != 0) return rc;
+    const bool moved = rep.moves.recenters >= 200 && rep.moves.grid_changes >= 5 &&
+                       rep.moves.orders >= 10'000 && rep.overflow_adds > 0;
+    std::printf("selftest part 2: %s ladder moves (%s of them onto a new grid), %s levels moved, %s orders "
+                "relinked - %s\n",
+                num(rep.moves.recenters).c_str(), num(rep.moves.grid_changes).c_str(),
+                num(rep.moves.levels).c_str(), num(rep.moves.orders).c_str(),
+                moved ? "PASS" : "FAIL: too few moves to exercise them");
+    return moved ? 0 : 1;
 }
 
 int fixture_test() {
@@ -130,11 +184,16 @@ int main(int argc, char** argv) {
         else if (a == "--depth") o.depth = std::max(1, std::atoi(val().c_str()));
         else if (a == "--chunk-mb") o.chunk = size_t{std::max<uint64_t>(1, std::strtoull(val().c_str(), nullptr, 10))} << 20;
         else if (a == "--ladder-mb") o.ladder_mb = std::strtoull(val().c_str(), nullptr, 10);
+        else if (a == "--placement") {
+            if (!parse_placement(val(), o.placement)) { std::printf("--placement: prescan, first-add or causal\n"); return 2; }
+        }
+        else if (a == "--recenter-after") o.recenter_after = static_cast<uint32_t>(std::max(1, std::atoi(val().c_str())));
         else if (a == "--cpu") o.cpu = std::atoi(val().c_str());
         else if (!a.empty() && a[0] != '-' && o.path.empty()) o.path = a;
         else {
             std::printf("usage: %s FILE [--differential] [--checkpoint N] [--at HH:MM:SS,...] "
-                        "[--symbols A,B,...] [--depth N] [--chunk-mb N] [--ladder-mb N] [--cpu N]\n"
+                        "[--symbols A,B,...] [--depth N] [--chunk-mb N] [--ladder-mb N]\n"
+                        "              [--placement prescan|first-add|causal] [--recenter-after N] [--cpu N]\n"
                         "       %s --fixture\n"
                         "       %s --selftest\n", argv[0], argv[0], argv[0]);
             return 2;

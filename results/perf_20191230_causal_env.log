@@ -1,0 +1,226 @@
+Environment for the perf_20191230_causal_*.log runs and replay_20191230_causal_differential.log.
+Second NASDAQ sample day: 12302019.NASDAQ_ITCH50.gz from https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/
+  compressed 3,524,013,057 bytes, sha256 ef03df46a27e6bda4dead017f84c2e3979df7211f02c7868b51d53fceb99c689
+  decompressed 8,251,407,909 bytes, sha256 5d81c2e14a0f748b29c674b6a342796932702034b4dd341e39e9a9ec5bac610f
+Binaries: the same files as perf_20190130_causal_env.log (source commit b8ea69f).
+--- run order and, before each timed run, power state, power plan and busiest processes
+=== perf_20191230_causal_prescan_throughput_1.log 2026-09-23 17:26:57
+power line: Online | battery 84%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           2.97
+explorer             0.55
+chrome               0.45
+kass                 0.45
+powershell           0.12
+WavesSvc64           0.12
+=== perf_20191230_causal_firstadd_throughput_1.log 2026-09-23 17:28:51
+power line: Online | battery 86%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           2.58
+chrome               0.48
+CrashPlanDesktop     0.31
+kass                 0.3
+Antigravity          0.14
+taskhostw            0.09
+=== perf_20191230_causal_causal_throughput_1.log 2026-09-23 17:31:12
+power line: Online | battery 88%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           3.33
+msedgewebview2       1.41
+chrome               0.55
+kass                 0.3
+claude               0.06
+powershell           0.06
+=== perf_20191230_causal_firstadd_throughput_2.log 2026-09-23 17:33:06
+power line: Online | battery 89%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           3.03
+chrome               0.62
+kass                 0.42
+ms-teams             0.08
+powershell           0.06
+CrashPlanDesktop     0.06
+=== perf_20191230_causal_causal_throughput_2.log 2026-09-23 17:35:27
+power line: Online | battery 91%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+cleanmgr             3.69
+Wispr Flow           2.67
+claude               0.48
+chrome               0.28
+chrome               0.19
+claude               0.17
+=== perf_20191230_causal_prescan_throughput_2.log 2026-09-23 17:37:28
+power line: Online | battery 92%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           2.73
+cleanmgr             0.75
+kass                 0.2
+chrome               0.19
+Antigravity          0.09
+claude               0.08
+=== perf_20191230_causal_causal_throughput_3.log 2026-09-23 17:39:24
+power line: Online | battery 93%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           2.75
+cleanmgr             2.38
+chrome               0.56
+kass                 0.39
+Antigravity          0.25
+nvsphelper64         0.08
+=== perf_20191230_causal_prescan_throughput_3.log 2026-09-23 17:41:22
+power line: Online | battery 94%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           2.84
+cleanmgr             2.31
+chrome               0.44
+Antigravity          0.17
+claude               0.16
+kass                 0.12
+=== perf_20191230_causal_firstadd_throughput_3.log 2026-09-23 17:43:14
+power line: Online | battery 95%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+cleanmgr             3.56
+Wispr Flow           2.48
+chrome               0.58
+kass                 0.39
+Antigravity          0.14
+taskhostw            0.11
+=== perf_20191230_causal_prescan_throughput_4.log 2026-09-23 17:45:37
+power line: Online | battery 95%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           3.08
+chrome               0.55
+kass                 0.36
+claude               0.06
+msedgewebview2       0.06
+powershell           0.06
+=== perf_20191230_causal_firstadd_throughput_4.log 2026-09-23 17:47:31
+power line: Online | battery 96%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+cleanmgr             3.94
+Wispr Flow           2.72
+Antigravity          0.47
+claude               0.34
+chrome               0.27
+kass                 0.17
+=== perf_20191230_causal_causal_throughput_4.log 2026-09-23 17:49:48
+power line: Online | battery 96%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           3.16
+cleanmgr             2.12
+Antigravity          0.34
+kass                 0.17
+claude               0.09
+taskhostw            0.08
+=== perf_20191230_causal_firstadd_throughput_5.log 2026-09-23 17:51:43
+power line: Online | battery 97%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           2.53
+chrome               0.52
+kass                 0.38
+powershell           0.05
+claude               0.05
+claude               0.03
+=== perf_20191230_causal_causal_throughput_5.log 2026-09-23 17:53:59
+power line: Online | battery 97%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           2.66
+chrome               0.53
+kass                 0.33
+RuntimeBroker        0.28
+claude               0.22
+explorer             0.17
+=== perf_20191230_causal_prescan_throughput_5.log 2026-09-23 17:55:55
+power line: Online | battery 98%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+cleanmgr             4.22
+Wispr Flow           2.64
+chrome               0.36
+claude               0.28
+kass                 0.27
+Antigravity          0.19
+=== perf_20191230_causal_causal_latency_1.log 2026-09-23 17:57:45
+power line: Online | battery 98%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           2.64
+chrome               0.38
+kass                 0.19
+claude               0.09
+taskhostw            0.05
+claude               0.05
+=== perf_20191230_causal_prescan_latency_1.log 2026-09-23 18:00:24
+power line: Online | battery 99%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+cleanmgr             4.03
+Wispr Flow           2.77
+claude               0.67
+chrome               0.53
+claude               0.27
+kass                 0.23
+=== perf_20191230_causal_firstadd_latency_1.log 2026-09-23 18:03:01
+power line: Online | battery 99%
+Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+top processes by CPU seconds in the last 5 s:
+Wispr Flow           2.48
+cleanmgr             2.28
+chrome               0.56
+kass                 0.34
+claude               0.16
+taskhostw            0.08
+--- run order (local time)
+Wed Sep 23 10:36:58 CDT 2026 start replay_20191230_causal_differential (correctness run, not timed)
+Wed Sep 23 10:56:25 CDT 2026 end replay_20191230_causal_differential
+Wed Sep 23 17:27:02 CDT 2026 start perf_20191230_causal_prescan_throughput_1.log
+Wed Sep 23 17:28:49 CDT 2026 end perf_20191230_causal_prescan_throughput_1.log
+Wed Sep 23 17:28:56 CDT 2026 start perf_20191230_causal_firstadd_throughput_1.log
+Wed Sep 23 17:31:10 CDT 2026 end perf_20191230_causal_firstadd_throughput_1.log
+Wed Sep 23 17:31:17 CDT 2026 start perf_20191230_causal_causal_throughput_1.log
+Wed Sep 23 17:33:05 CDT 2026 end perf_20191230_causal_causal_throughput_1.log
+Wed Sep 23 17:33:11 CDT 2026 start perf_20191230_causal_firstadd_throughput_2.log
+Wed Sep 23 17:35:23 CDT 2026 end perf_20191230_causal_firstadd_throughput_2.log
+Wed Sep 23 17:35:33 CDT 2026 start perf_20191230_causal_causal_throughput_2.log
+Wed Sep 23 17:37:26 CDT 2026 end perf_20191230_causal_causal_throughput_2.log
+Wed Sep 23 17:37:33 CDT 2026 start perf_20191230_causal_prescan_throughput_2.log
+Wed Sep 23 17:39:23 CDT 2026 end perf_20191230_causal_prescan_throughput_2.log
+Wed Sep 23 17:39:30 CDT 2026 start perf_20191230_causal_causal_throughput_3.log
+Wed Sep 23 17:41:21 CDT 2026 end perf_20191230_causal_causal_throughput_3.log
+Wed Sep 23 17:41:27 CDT 2026 start perf_20191230_causal_prescan_throughput_3.log
+Wed Sep 23 17:43:13 CDT 2026 end perf_20191230_causal_prescan_throughput_3.log
+Wed Sep 23 17:43:20 CDT 2026 start perf_20191230_causal_firstadd_throughput_3.log
+Wed Sep 23 17:45:35 CDT 2026 end perf_20191230_causal_firstadd_throughput_3.log
+Wed Sep 23 17:45:42 CDT 2026 start perf_20191230_causal_prescan_throughput_4.log
+Wed Sep 23 17:47:26 CDT 2026 end perf_20191230_causal_prescan_throughput_4.log
+Wed Sep 23 17:47:36 CDT 2026 start perf_20191230_causal_firstadd_throughput_4.log
+Wed Sep 23 17:49:47 CDT 2026 end perf_20191230_causal_firstadd_throughput_4.log
+Wed Sep 23 17:49:54 CDT 2026 start perf_20191230_causal_causal_throughput_4.log
+Wed Sep 23 17:51:42 CDT 2026 end perf_20191230_causal_causal_throughput_4.log
+Wed Sep 23 17:51:48 CDT 2026 start perf_20191230_causal_firstadd_throughput_5.log
+Wed Sep 23 17:53:58 CDT 2026 end perf_20191230_causal_firstadd_throughput_5.log
+Wed Sep 23 17:54:04 CDT 2026 start perf_20191230_causal_causal_throughput_5.log
+Wed Sep 23 17:55:50 CDT 2026 end perf_20191230_causal_causal_throughput_5.log
+Wed Sep 23 17:56:00 CDT 2026 start perf_20191230_causal_prescan_throughput_5.log
+Wed Sep 23 17:57:44 CDT 2026 end perf_20191230_causal_prescan_throughput_5.log
+Wed Sep 23 17:57:51 CDT 2026 start perf_20191230_causal_causal_latency_1.log
+Wed Sep 23 18:00:23 CDT 2026 end perf_20191230_causal_causal_latency_1.log
+Wed Sep 23 18:00:30 CDT 2026 start perf_20191230_causal_prescan_latency_1.log
+Wed Sep 23 18:03:00 CDT 2026 end perf_20191230_causal_prescan_latency_1.log
+Wed Sep 23 18:03:07 CDT 2026 start perf_20191230_causal_firstadd_latency_1.log
+Wed Sep 23 18:06:09 CDT 2026 end perf_20191230_causal_firstadd_latency_1.log
+Wed Sep 23 18:06:09 CDT 2026 ALL DONE

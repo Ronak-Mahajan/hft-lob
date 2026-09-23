@@ -33,33 +33,46 @@ orders.
   An independent decoder that shares no code with the book counts the same
   messages by type and prints the same books for those ten symbols at 16:00
   ET.
+- **Ladders placed without look-ahead.** Each book places its price ladder
+  on its first add and re-centers it on the live market when adds start to
+  miss it, using only the messages it has already applied, as a live feed
+  handler would. The move runs inside the timed loop. 99.4% of the day's
+  adds land on a ladder, and the books are identical to the reference's
+  after every message (the checks above, rerun with this placement: 0
+  mismatches).
+- **Throughput over the whole day.** **10.36M messages/second** on one
+  P-core (median of five runs, 96.55 ns/message; range 8.62-10.86M). In the
+  same batch, with the same binary, ladders sized and placed from a pre-scan
+  of the day's own file, which no live handler can do, measured 10.74M
+  (range 9.44-11.06M): an upper bound the causal placement comes within 4%
+  of. File reads are outside the timed loops.
 - **Per-message latency over the whole day.** Every one of the 368,366,634
   messages timed on its own (the book lookup, decode and book update, on a
-  file already in memory), on one P-core: **p50 183 ns, p90 469 ns, p99
-  1,082 ns, p99.9 1,516 ns**.
-- **Throughput over the whole day.** **8.91M messages/second** on one P-core
-  (median of five runs, 112.22 ns/message; range 8.85-9.06M), **52.54M**
-  through one demux thread feeding five workers, and **99.80M** aggregate
-  with the input pre-split across 13 workers. File reads are outside the
-  timed loops.
+  file already in memory), on one P-core: **p50 178 ns, p90 492 ns, p99
+  1,017 ns, p99.9 1,680 ns** (pre-scan placement, same batch: p50 184, p99
+  1,113, p99.9 1,659).
+- **A second day.** On NASDAQ's 2019-12-30 sample (268,744,780 messages,
+  8,892 books), with the policy's two parameters unchanged: 0 mismatches
+  against the reference, and 9.48M messages/second against 10.17M for the
+  pre-scan placement.
+- **Multi-core** (pre-scan placement): **52.54M** messages/second through
+  one demux thread feeding five workers, and **99.80M** aggregate with the
+  input pre-split across 13 workers.
 
 Machine: Intel Core Ultra 7 265H laptop (6 P-cores, 8 E-cores, 2 low-power
 E-cores, no SMT), Windows 11, on AC power; g++ 16.1.0, `-O3 -march=native`.
-One recorded day. Every book's capacity, and where its price ladder sits,
-comes from a pre-scan of the same file (see *Recorded-day replay*), which a
-live feed handler cannot do: it would size from the previous day. Placed
-instead at each symbol's first add, the ladders catch fewer than half the
-adds and one P-core applies the day at 4.04M messages/second (see
-*Recorded-day performance*). Not measured: memory use, the core clock during
+Two recorded days on one laptop. Order-pool and id-map capacities (memory
+sizes, not where a price rests) still come from a pre-scan of the day's
+file in every placement. Not measured: memory use, the core clock during
 the runs, file-read time, and any other machine or OS. The multi-core
 configurations ran once each.
 
 | Figures | Committed console output |
 |---|---|
-| replay, drops, reference comparison | [`results/replay_20190130_differential.log`](results/replay_20190130_differential.log) |
+| replay, drops, reference comparison | [`results/replay_20190130_differential.log`](results/replay_20190130_differential.log) (pre-scan placement) and [`results/replay_20190130_causal_differential.log`](results/replay_20190130_causal_differential.log) (causal placement) |
+| throughput and latency by placement, both days | `results/perf_20190130_causal_{prescan,firstadd,causal}_{throughput,latency}_*.log` and the 2019-12-30 equivalents, collected in [`results/perf_20190130.json`](results/perf_20190130.json) and [`results/perf_20191230.json`](results/perf_20191230.json) |
 | closing crosses vs official closes | [`results/closing_cross_20190130.md`](results/closing_cross_20190130.md), from [`itch_count_20190130.log`](results/itch_count_20190130.log), [`closing_cross_replay_20190130.log`](results/closing_cross_replay_20190130.log), [`official_close_nasdaq_20190130.log`](results/official_close_nasdaq_20190130.log) and [`official_close_yahoo_20190130.log`](results/official_close_yahoo_20190130.log) |
-| per-message latency | [`results/perf_20190130_run_latency_1.log`](results/perf_20190130_run_latency_1.log) (runs 2 and 3 alongside, and a rebuilt rerun in [`perf_20190130_repro_latency.log`](results/perf_20190130_repro_latency.log)) |
-| throughput | `results/perf_20190130_run_throughput_{1..5}.log`, `results/perf_20190130_run_multicore_{demux,presplit}.log`, all collected in [`results/perf_20190130.json`](results/perf_20190130.json) |
+| the pre-scan placement's own batch (per-type latency, E-core, multi-core) | `results/perf_20190130_run_*.log`, also in [`results/perf_20190130.json`](results/perf_20190130.json) |
 | the input file, and the command behind every result | [`data/MANIFEST.md`](data/MANIFEST.md) |
 
 ## Recorded-day replay
@@ -71,19 +84,55 @@ same `itch::dispatch_checked` as the benchmarks into one `ExactOrderBook` per
 `stock_locate`. The file is not in this repo; `data/MANIFEST.md` gives its
 source, sizes and SHA-256.
 
-**Sizing comes from a pre-scan.** The replay reads the file twice. Pass 1
-counts and length-checks every message, reads the Stock Directory, finds each
-symbol's peak resting-order count and keeps its add prices; pass 2 is the
-replay. A book's tick is one cent when the symbol's median add price is at
-least $1.00 (Reg NMS Rule 612 keeps displayed quotes there in whole cents) and
-$0.0001 below that: 8,323 books on a $0.01 grid and 372 on $0.0001. Ladder
-widths, from 64 to 131,072 ticks, come from a greedy split of a 1,024 MB
-ladder budget by adds covered per tick, each ladder placed on the window
-where that symbol's adds arrived. 191,722,488 of the day's 191,919,099 adds
-(99.898%) landed on a ladder and the other 196,611 in the overflow, exactly
-as the pre-scan predicted. The pre-scan sets sizes only: an add that misses
-the ladder rests in the overflow, so the reconstructed books do not depend
-on it.
+**Pre-scan and placement.** The replay reads the file twice. Pass 1 counts
+and length-checks every message, reads the Stock Directory, finds each
+symbol's peak resting-order count (which sizes its order pool and id map)
+and keeps its add prices; pass 2 is the replay. Where each book's ladder
+sits is the `--placement`:
+
+- `causal`: every ladder 2,048 ticks (the widest power of two whose ladders
+  fit a 1,024 MB budget across all books). Each book places its ladder
+  itself, centered on its first add, and moves it from the messages it has
+  applied (see *Ladders that move*). On 2019-01-30, 190,757,952 of the
+  191,919,099 adds (99.395%) landed on a ladder.
+- `prescan` (the default): a book's tick is one cent when the symbol's
+  median add price for the day is at least $1.00 (Reg NMS Rule 612 keeps
+  displayed quotes there in whole cents) and $0.0001 below that. Ladder
+  widths, from 64 to 131,072 ticks, come from a greedy split of the 1,024 MB
+  budget by adds covered per tick, each ladder placed on the window where
+  that symbol's adds arrived during the day. This reads the day ahead, so it
+  is an upper bound rather than a policy: 191,722,488 adds (99.898%) landed
+  on a ladder.
+- `first-add`: 2,048-tick ladders fixed at each symbol's first add: 93,816,959
+  adds (48.9%).
+
+Placement sets sizes and positions only: an add that misses the ladder
+rests in the overflow, so the reconstructed books do not depend on it, and
+every placement prints the same book digests.
+
+**Ladders that move.** An `ExactOrderBook` built with `BookParams::recenter`
+starts with no ladder placed and centers it on its first add. After that,
+an add that misses the ladder counts as a near-touch miss when it is on the
+grid a moved ladder would use and is at or better than the best price on
+its own side, or less than half a ladder behind it; stub quotes and deep
+orders never count. After 8 near-touch misses since the last move, the book
+re-centers the ladder on the midpoint of its best bid and offer (on the
+add's own price when the book is one-sided or its spread is half a ladder
+or wider), on the $0.01 grid for a center at or above $1.00 and $0.0001
+below. A move keeps routing a pure function of the price: levels that
+leave the window go into the overflow at their exact price, overflow levels
+that enter it come onto the ladder, levels that stay shift to their new
+index, every order in a moved level gets its new ladder index, FIFO order
+is untouched, and the occupancy bitmap and cached best are rebuilt. The
+move runs inside the add that triggered it, on the overflow's cold path, so
+the ladder hot path is the same code in every placement; its cost is inside
+every timed figure below. The ladder memory is allocated once, at
+construction; a move allocates one overflow map node for each level it
+pushes off the ladder, as an add that misses the ladder does. The two
+parameters (2,048 ticks and 8 misses) were chosen before any run of this
+placement and are the same on both days measured. On 2019-01-30 the ladders
+moved 18,648 times after their 8,695 placements, moving 908,796 levels and
+relinking 2,626,046 orders.
 
 The reference (`src/ref_market.hpp`) decodes every message from the
 specification's byte offsets rather than the packed structs, keeps exact
@@ -104,24 +153,36 @@ order (0 unknown order ids, in the books and in the model), none took more
 shares than rested (the model counts that), and the day ends with 0 resting
 orders in both.
 
-From [`results/replay_20190130_differential.log`](results/replay_20190130_differential.log):
+The differential ran once with each of the pre-scan and causal placements
+([`results/replay_20190130_differential.log`](results/replay_20190130_differential.log),
+[`results/replay_20190130_causal_differential.log`](results/replay_20190130_causal_differential.log));
+the two printed the same book digest after every chunk:
 
-| | |
-|---|---:|
-| messages | 368,366,634 |
-| add orders `A` / `F` | 162,970,455 / 1,725,898 |
-| executions `E` / `C` | 8,096,995 / 158,886 |
-| cancels `X`, deletes `D`, replaces `U` | 4,669,874 / 158,273,361 / 27,222,746 |
-| stock_locates in the directory / with order messages | 8,713 / 8,695 |
-| bad-length messages, orders dropped, unknown order ids | 0 / 0 / 0 |
-| adds on a ladder / in the overflow | 191,722,488 / 196,611 |
-| order messages checked right after they were applied | 363,118,215 |
-| orders / price levels compared in those checks | 390,340,961 / 390,340,961 |
-| **mismatches after a message** | **0** |
-| checkpoints (every 5M messages, 12:00 and 16:00 ET, end of file) | 76 |
-| price levels / queued orders compared at the checkpoints | 49,562,417 / 119,295,162 |
-| **mismatches at a checkpoint** | **0** |
-| resting orders at end of file | 0 |
+| | pre-scan placement | causal placement |
+|---|---:|---:|
+| messages | 368,366,634 | 368,366,634 |
+| add orders `A` / `F` | 162,970,455 / 1,725,898 | same |
+| executions `E` / `C` | 8,096,995 / 158,886 | same |
+| cancels `X`, deletes `D`, replaces `U` | 4,669,874 / 158,273,361 / 27,222,746 | same |
+| stock_locates in the directory / with order messages | 8,713 / 8,695 | same |
+| bad-length messages, orders dropped, unknown order ids | 0 / 0 / 0 | 0 / 0 / 0 |
+| adds on a ladder / in the overflow | 191,722,488 / 196,611 | 190,757,952 / 1,161,147 |
+| ladder moves after placement / orders relinked by them | - | 18,648 / 2,626,046 |
+| order messages checked right after they were applied | 363,118,215 | 363,118,215 |
+| orders / price levels compared in those checks | 390,340,961 / 390,340,961 | same |
+| **mismatches after a message** | **0** | **0** |
+| checkpoints (every 5M messages, 12:00 and 16:00 ET, end of file) | 76 | 76 |
+| price levels / queued orders compared at the checkpoints | 49,562,417 / 119,295,162 | same |
+| **mismatches at a checkpoint** | **0** | **0** |
+| resting orders at end of file | 0 | 0 |
+
+The same differential with the causal placement on NASDAQ's 2019-12-30
+sample
+([`results/replay_20191230_causal_differential.log`](results/replay_20191230_causal_differential.log)):
+268,744,780 messages into 8,892 books, 263,241,937 order messages checked
+after the message and 56 checkpoints, 0 mismatches in both, 0 drops, 0
+unknown order ids; 136,337,584 of 140,270,523 adds (97.2%) on a ladder, and
+21,743 ladder moves.
 
 The log also prints the books of AAPL, MSFT, AMZN, BKNG and WFT (a sub-dollar
 stock on the $0.0001 grid) at 12:00 and 16:00 ET, and the opening and closing
@@ -170,15 +231,57 @@ for all ten.
 the same pre-scan and streams the same file in 256 MB chunks. Every figure
 here: the 265H laptop above, on AC power, Windows 11 on the Balanced power
 plan, with a browser and other everyday applications open; g++ 16.1.0,
-`-O3 -march=native -DNDEBUG`, binaries built from commit `380902a` unless a
-paragraph names another. Each run pins its thread (logical CPU 1, a P-core,
-unless stated) and raises the process to high priority. The raw console
-output of every run is a `results/perf_20190130_*.log` file, and
-[`results/perf_20190130.json`](results/perf_20190130.json) collects every
-number of the `380902a` runs, generated from their logs by
-`tools/perf_json.pl`.
+`-O3 -march=native -DNDEBUG`. Each run pins its thread (logical CPU 1, a
+P-core, unless stated) and raises the process to high priority. The raw
+console output of every run is a `results/perf_*.log` file, and
+[`results/perf_20190130.json`](results/perf_20190130.json) and
+[`results/perf_20191230.json`](results/perf_20191230.json) collect every
+number, generated from the logs by `tools/perf_json.pl`, which refuses if
+any run failed, ran off AC power, or printed a book digest different from
+its day's differential run.
 
-**Single core, end to end.** Every message is framed, length-checked, routed
+**Placement, back to back.** One build (commit `b8ea69f`) of `lob_perf` and
+`lob_perf_latency`, run with `--placement prescan`, `first-add` and
+`causal` interleaved (each round of three in a different order), five
+throughput runs of each and then two latency runs of each, then the same on
+2019-12-30 (one latency run of each). Before every run the batch recorded
+the power state (AC online for all 39), the power plan and the busiest
+processes ([`results/perf_20190130_causal_env.log`](results/perf_20190130_causal_env.log),
+[`results/perf_20191230_causal_env.log`](results/perf_20191230_causal_env.log)).
+Single-core M messages/second, median (min-max) of five runs:
+
+| day | pre-scan (look-ahead) | first-add | **causal** | causal / pre-scan |
+|---|---:|---:|---:|---:|
+| 2019-01-30 | 10.74 (9.44-11.06) | 4.45 (3.80-5.02) | **10.36 (8.62-10.86)** | 0.965 |
+| 2019-12-30 | 10.17 (9.83-10.83) | 5.22 (5.06-5.25) | **9.48 (9.07-9.95)** | 0.932 |
+| adds in the overflow, 2019-01-30 | 196,611 | 98,102,140 | 1,161,147 | |
+| adds in the overflow, 2019-12-30 | 407,434 | 53,992,277 | 3,932,939 | |
+
+Per-message latency on 2019-01-30, all 368,366,634 messages, ns, in run
+order (every message timed as described below):
+
+| placement, run | p50 | p90 | p99 | p99.9 | p99.99 |
+|---|---:|---:|---:|---:|---:|
+| pre-scan, 1 | 184 | 539 | 1,113 | 1,659 | 6,605 |
+| first-add, 1 | 219 | 910 | 1,874 | 2,703 | 8,615 |
+| **causal, 1** | **178** | **492** | **1,017** | **1,680** | **6,413** |
+| causal, 2 | 170 | 466 | 965 | 1,591 | 5,885 |
+| first-add, 2 | 204 | 854 | 1,822 | 2,522 | 7,308 |
+| pre-scan, 2 | 169 | 480 | 1,041 | 1,382 | 5,203 |
+
+On 2019-12-30: pre-scan p50 171 / p99 978 / p99.9 1,328, causal 174 / 1,082
+/ 2,020, first-add 199 / 1,804 / 2,648. The causal placement's cost sits in
+the messages that place or move a ladder, 27,343 of them on 2019-01-30:
+p50 1.4 us, p99 57 us, and at most 532 us in run 1. Most of them are
+replaces and adds, which is where its p99.9 rises above the pre-scan's (`U`
+3,508 ns against 1,727 in the first runs). Throughput varied more between
+rounds than between placements within a round (runs 1 to 5 of the pre-scan
+placement fell from 11.06M to 9.44M as the batch went on), so the
+comparison to read is the ratio within this batch, not these absolute
+numbers against the separate pre-scan batch below.
+
+**Single core, end to end** (pre-scan placement, its own batch built from
+commit `380902a`). Every message is framed, length-checked, routed
 to its `stock_locate` book and applied (`dispatch_segment()`, the loop
 `lob_replay` uses). Only that loop over a chunk already in memory is timed,
 and the 42 chunk times are summed; file reads, the pre-scan and the digests
@@ -254,25 +357,13 @@ placement measured, for all messages, p50 181 and 182 ns and p99 1,075 and
 [`_2.log`](results/perf_20190130_placement_prescan_latency_2.log)), in line
 with run 1 above.
 
-**Ladder placement without look-ahead.** Every figure above uses the
-pre-scan's placement: each ladder sits where that symbol's adds arrived
-during the day, and its width follows how widely they spread.
-`--placement first-add` uses only what is known when a symbol's first add
-arrives: every ladder 2,048 ticks wide (the widest power of two that fits
-the 1,024 MB budget across 8,695 books), centered on that first add, on a
-one-cent grid at or above $1.00 and $0.0001 below. The books are the same (every chunk's
-digest equals the differential run's), but the first add is a poor anchor:
-93,816,959 of the 191,919,099 adds land on a ladder and the rest take the
-overflow's `std::map`. With the same binary, back to back, one P-core applies
-the day at 4.04M messages/second against 9.02M with the pre-scan placement
+**An earlier first-add batch.** Built from `09da5d0`, the first-add and
+pre-scan placements back to back measured 4.04M and 9.02M messages/second
 ([`results/perf_20190130_placement_firstadd_throughput.log`](results/perf_20190130_placement_firstadd_throughput.log),
 [`results/perf_20190130_placement_prescan_throughput.log`](results/perf_20190130_placement_prescan_throughput.log)),
-and per-message latency for all messages is p50 235 ns, p90 805, p99 1,813
-and p99.9 2,626
-([`results/perf_20190130_placement_firstadd_latency.log`](results/perf_20190130_placement_firstadd_latency.log),
-run between the two pre-scan latency runs above). A live feed handler would
-place its ladders from the previous day's prices, which a one-day replay
-cannot test.
+and the first-add latency build (`62f8be9`) p50 235 ns, p99 1,813 and p99.9 2,626
+([`results/perf_20190130_placement_firstadd_latency.log`](results/perf_20190130_placement_firstadd_latency.log)),
+the same ordering as the placement batch above.
 
 **Multi-core.** The books are sharded by `stock_locate % W`, as in
 `engine.hpp`. *Demux*: one thread reads each chunk and routes every message
@@ -300,12 +391,14 @@ demux configurations add E-cores and get slower; the busiest of 13 shards
 carries 1.24 times the mean load.
 
 **Same books in every run.** Each of the runs above (throughput, latency,
-both multi-core modes at every W) printed the book digest after each of the
-42 chunks, and every digest equals the one the differential run printed at
-the same point. Every run also ends with 0 bad-length messages, 0 dropped
-orders, 0 unknown order ids, and the number of adds in the overflow that its
-placement predicted (196,611 with the pre-scan placement, 98,102,140 with
-the first-add one).
+both multi-core modes at every W, and every placement) printed the book
+digest after each chunk, and every digest equals the one the differential
+run of the same day printed at the same point. Every run also ends with 0
+bad-length messages, 0 dropped orders and 0 unknown order ids. The pre-scan
+and first-add runs end with the number of adds in the overflow that the
+pre-scan predicted for their placement (196,611 and 98,102,140 on
+2019-01-30); a causal ladder moves, so its count is measured, not predicted,
+and is the same in every run of a day.
 
 ## Architecture decisions
 
@@ -315,7 +408,7 @@ the first-add one).
 | Free management | intrusive LIFO free list through `Order::next` (hottest slot reused first) | `std::deque` free queue |
 | Order id lookup | flat open-addressing map, Fibonacci hash, linear probe, backward-shift erase (no tombstones to decay over a trading day) | `std::unordered_map` (node-based: a pointer chase per lookup and an allocation per insert) |
 | Price ladder | flat tick-indexed array per side, `levels[(price - base) / tick]`; the divide is one multiply-high by a precomputed reciprocal, skipped when the tick is 1 | `std::map` (O(log n), serialized pointer-chase misses) |
-| Price band | **per symbol**: every `stock_locate` gets its own ladder base and width (64 to 131,072 ticks on 2019-01-30), placed by a pre-scan where that symbol's adds arrive, within a 1,024 MB total ladder budget. *Trade-off*: the replay reads the file twice to size the books; a live feed handler would size from the previous day instead. | one band for every symbol: the benchmark book's $0.01-$1,310.72 cannot hold AMZN or BKNG |
+| Price band | **per symbol, and it moves**: every `stock_locate` gets its own 2,048-tick ladder, placed on its first add and re-centered on the book's midpoint after 8 near-touch misses, from the messages already applied. *Trade-off*: a move costs microseconds on the message that triggers it (p50 1.4 us, p99 57 us on 2019-01-30), and its cost is in the timed loop. A pre-scan placement (64 to 131,072 ticks per symbol, where the day's adds arrive) is kept as the look-ahead upper bound. | one band for every symbol: the benchmark book's $0.01-$1,310.72 cannot hold AMZN or BKNG |
 | Price units and tick | ITCH's **native $0.0001 units**; a book's tick is $0.01 when its symbol's median add is at least $1.00 and $0.0001 below. *Trade-off*: a tick other than 1 costs one multiply-high per lookup, and a price between two grid points (a sub-penny price in a dollar stock) cannot use the ladder. | whole cents everywhere, which merges distinct sub-penny prices into one level |
 | Prices off the ladder | **exact overflow**: a `std::map` per side from price to a level holding the same pool FIFO as a ladder level; BBO and depth merge the two by price, and a replace can move an order between them. *Trade-off*: that path is O(log n) and allocates one node per new level; on 2019-01-30 it took 196,611 of 191,919,099 adds (0.102%). | dropping off-band adds and counting them (what the ladder-only `LimitOrderBook` of the benchmarks does), or rounding them onto the ladder |
 | Ladder-only vs exact book | one template, `BasicOrderBook<WithOverflow>`: `LimitOrderBook` compiles to exactly the ladder-only code the synthetic benchmarks time, `ExactOrderBook` adds the grid and the overflow | a runtime flag, which puts a branch in the benchmark book's hot path |
@@ -379,7 +472,7 @@ random order.
 The generated stream drives a single book. The recorded day spreads the same
 work over 8,695 books with 1,024 MB of ladders, 73 MB of order pools and
 106 MB of id maps (sizes from the differential log), and measures 8.91M
-messages/second on the same logical CPU.
+messages/second on the same logical CPU with the pre-scan placement.
 
 **`lob_parallel`, 128 books over W workers** (one run,
 [`results/synthetic_lob_parallel_run_1.log`](results/synthetic_lob_parallel_run_1.log)):
@@ -435,6 +528,19 @@ counts; the rates a shared runner prints there are not measurements.
    layout implies, and leave the books written out by hand in the test; as a
    negative control, the cent-denominated `LimitOrderBook` must drop adds and
    merge the sub-penny levels on the same file
+8. **moving-ladder unit checks**, four scenarios (`--only 8a` to `8d`), every
+   step checked by `ExactOrderBook::audit()` (bitmap, cached best, every
+   order's ladder index, price and queue links, the id map): a move up with
+   orders resting on both edges of the ladder, then execute, cancel, delete
+   and replace of orders that left the ladder, came onto it or shifted; a
+   move down in which a two-order level keeps its FIFO; grid changes across
+   .00 in both directions; and what must not move a ladder (stub quotes,
+   deep orders, sub-penny prices, fewer than K near-touch misses)
+9. **moving-ladder fuzz**: streams whose prices drift, through books whose
+   ladders move (64 or 256 ticks, K = 1, 2 or 8), including a symbol that
+   crosses .00 and ladders clamped at ../../readme2.pl and at the top of the u32 range,
+   compared with `ref::Market` after every order message, audited every
+   1,000 messages and compared in full 40 times per configuration
 
 `lob_parallel` runs one multi-instrument stream through one thread and
 through the sharded engine and requires every instrument's full-band depth,
@@ -442,19 +548,27 @@ the processed-message count and the drop / bad-length counters to agree
 before it prints any scaling table. `spsc_stress` pushes sequence-checked
 messages through the ring.
 
-CI (`.github/workflows/ci.yml`) builds `lob_bench`, `lob_parallel` and
-`spsc_stress` single-TU with `-std=c++20 -O2 -Wall -Wextra -pthread` on
-ubuntu (g++-13, clang++-18) and Windows (MinGW g++), with an ASan+UBSan leg,
-and runs `lob_bench --quick`, `lob_parallel --quick` and `spsc_stress`; a TSan
+`tools/mutants_moving_ladder.pl` checks that checks 8 and 9 and the
+selftest's causal part would catch real mistakes: it plants eleven
+hand-made bugs in the moving ladder, one at a time, and runs each test
+against each. Every bug is caught by at least one test, and every test
+catches at least one bug
+([`results/mutants_moving_ladder.log`](results/mutants_moving_ladder.log)).
+
+CI (`.github/workflows/ci.yml`) builds every binary single-TU with
+`-std=c++20 -O2 -Wall -Wextra -pthread` on ubuntu (g++-13, clang++-18) and
+Windows (MinGW g++), with an ASan+UBSan leg, and runs `lob_bench --quick`,
+`lob_parallel --quick`, `lob_replay --selftest` and `spsc_stress`; a TSan
 leg runs `spsc_stress`. `--quick` shrinks the benchmark sizes only: every
-check above runs, including check 7, so every leg except TSan replays the
-crafted file through the `lob_replay` code on every push. The workflow does
-not build the `lob_replay` or `lob_perf` binaries themselves; `build.ps1 -Run`
-runs `lob_replay --fixture` and `lob_replay --selftest` locally. The selftest
-replays a generated 40-symbol day of 1,500,044 messages through 4,103-byte
-chunks with the differential; 11,352 of its chunk boundaries fall inside a
-message ([`results/replay_selftest.log`](results/replay_selftest.log); the
+check above runs. The selftest replays a generated 40-symbol day of
+1,500,044 messages through 4,103-byte chunks with the differential; 11,352
+of its chunk boundaries fall inside a message
+([`results/replay_selftest.log`](results/replay_selftest.log); the
 fixture's output is [`results/replay_fixture.log`](results/replay_fixture.log)).
+Its second part replays a generated day whose prices drift, some across
+.00, through 64-tick causal ladders that move after 2 near-touch misses,
+with the differential on: hundreds of ladder moves, each checked after the
+message that caused it.
 CI checks correctness, not speed: the messages/second a shared runner prints
 under `--quick` are not measurements.
 
@@ -476,7 +590,8 @@ include/lob/itch.hpp        zero-copy ITCH 5.0 dispatch, length table, FeedHandl
 include/lob/spsc.hpp        wait-free SPSC ring
 include/lob/engine.hpp      sharded multi-core engine (demux, rings, pinned workers)
 src/main.cpp                lob_bench: unit checks, differential fuzz, benchmarks,
-                            ExactOrderBook checks and fuzz, crafted-file replay
+                            ExactOrderBook checks and fuzz, crafted-file replay,
+                            moving-ladder checks and fuzz
 src/parallel_main.cpp       lob_parallel: parallel-vs-sequential check, scaling
 src/spsc_stress.cpp         spsc_stress: sequence-checked ring stress (TSan target)
 src/replay_main.cpp         lob_replay: command line, --fixture, --selftest
@@ -490,7 +605,8 @@ src/book_diff.hpp           full book comparison (levels, queues, BBO) and the
                             per-message check of what a message touched
 src/wire_gen.hpp            generated multi-symbol wire-unit ITCH stream (tests)
 tools/itch_count.cpp        independent recount of a BinaryFILE (no shared code)
-tools/perf_json.pl          builds results/perf_20190130.json from the logs
+tools/perf_json.pl          builds results/perf_2019*.json from the logs
+tools/mutants_moving_ladder.pl  plants bugs in the moving ladder, runs its tests
 tools/*.sh                  data manifest, official closes (Nasdaq, Yahoo Finance)
 data/MANIFEST.md            the input file: source, sizes, hashes, commands
 results/                    console output of every run cited in this README
@@ -515,7 +631,7 @@ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
     -I include src/perf_main.cpp -o lob_perf.exe
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
     -DLOB_PERF_LATENCY -I include src/perf_main.cpp -o lob_perf_latency.exe
-./lob_bench.exe       # checks 1-7, latency percentiles, single-core throughput
+./lob_bench.exe       # checks 1-9, latency percentiles, single-core throughput
 ./lob_parallel.exe    # parallel-vs-sequential verification, multi-core scaling
 ./spsc_stress.exe     # sequence-checked messages through the SPSC ring
 ./lob_replay.exe --fixture                             # crafted file, 1-byte chunks up
@@ -548,7 +664,10 @@ message touched, and every book in full at every checkpoint),
 `--checkpoint N` (default 5,000,000 messages), `--at HH:MM:SS,...` (extra
 checkpoints that also print the named books; default 12:00:00,16:00:00 ET),
 `--symbols A,B,...`, `--depth N`, `--chunk-mb N` (default 256),
-`--ladder-mb N` (default 1024), `--cpu N`. It exits non-zero unless every
+`--ladder-mb N` (default 1024), `--placement prescan|first-add|causal`
+(default `prescan`; see *Recorded-day replay*), `--recenter-after N` (the
+causal placement's near-touch misses per move, default 8), `--cpu N`. It
+exits non-zero unless every
 check passes. `--fixture` and `--selftest` are the two built-in tests above.
 
 `lob_perf FILE` takes the same file. `--mode single` (default) times the
@@ -557,10 +676,10 @@ configurations for each W in `--workers 1,2,4` (default); `--cpu N` pins the
 single-core thread (default: the first fast core after CPU 0), `--cpus a,b,...`
 gives the multi-core CPU order (main thread first; default: fast cores
 first, from the OS's CPU sets); `--chunk-mb N` and `--ladder-mb N` as for
-`lob_replay`; `--placement first-add` places every ladder at its symbol's
-first add instead of where the pre-scan found the day's adds (default
-`prescan`). `lob_perf_latency FILE` takes `--cpu`, `--chunk-mb`,
-`--ladder-mb` and `--placement`. Both print the machine, power state, TSC
+`lob_replay`; `--placement` and `--recenter-after` as for `lob_replay`.
+`lob_perf_latency FILE` takes `--cpu`, `--chunk-mb`, `--ladder-mb`,
+`--placement` and `--recenter-after`, and with the causal placement also
+prints the latency of the messages that placed or moved a ladder. Both print the machine, power state, TSC
 calibration and a book digest per chunk, and exit non-zero unless every
 check passes.
 
@@ -582,12 +701,14 @@ and is not redistributed here.
   drops and counts out-of-band adds. `ExactOrderBook`, the replay's book,
   holds any u32 wire price exactly, routing what its ladder does not cover to
   the overflow.
-- `lob_replay` sizes its books from a pre-scan of the same file, which suits
-  a historical replay. A live feed handler would size from the previous day
-  or a reserve, since it cannot read the day ahead. How much the placement
-  matters is measured in *Recorded-day performance*: with each ladder at its
-  symbol's first add, fewer than half the day's adds land on a ladder and
-  the single-core rate falls from 9.02M to 4.04M messages/second.
+- Ladder placement is causal with `--placement causal`: each book places
+  and moves its own ladder from the messages it has applied, and on the two
+  days measured it runs at 0.965 and 0.932 of the throughput of ladders
+  placed from a pre-scan of the same day. Order-pool and id-map capacities
+  still come from the pre-scan in every placement; a live feed handler would
+  size them from the previous day or a reserve. The two policy parameters
+  (2,048 ticks, 8 misses) were fixed before either day was run, and two
+  days on one laptop is the whole of the evidence.
 - The book does not match crossing orders; it is a *reconstructor*, and
   crossings are resolved by the venue and arrive as Execute messages, per ITCH
   semantics.

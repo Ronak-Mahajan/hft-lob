@@ -1,0 +1,120 @@
+=== lob_perf: NASDAQ TotalView-ITCH 5.0 recorded day, mode latency ===
+run: 2026-09-23 17:12:09 local | command: lob_perf_latency.exe 01302019.NASDAQ_ITCH50 --cpu 1 --placement causal
+machine
+  cpu: Intel(R) Core(TM) Ultra 7 265H | logical processors: 16
+  cpu sets (index: efficiency class / core / last-level cache):
+    0: 1/0/0 1: 1/1/0 2: 0/2/0 3: 0/3/0 4: 0/4/0 5: 0/5/0 6: 0/6/0 7: 0/7/0
+    8: 0/8/0 9: 0/9/0 10: 1/10/0 11: 1/11/0 12: 1/12/0 13: 1/13/0 14: 0/14/14 15: 0/15/14
+  os: Windows 10.0 build 26200
+  memory: 31.5 GB total, 5.0 GB available at start
+  power: AC line online | battery 72% | battery saver off
+  compiler: g++ 16.1.0 | flags: -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include -DLOB_PERF_LATENCY
+  source: git commit b8ea69f059225ae816bb683c0fb57aeade1746b6
+  cpu order, fastest type first: 0 1 10 11 12 13 2 3 4 5 6 7 8 9 14 15
+tsc
+  invariant TSC (CPUID 80000007h EDX bit 8): yes
+  CPUID 15h nominal TSC frequency: 3.686400 GHz
+  measured against steady_clock (QueryPerformanceCounter on Windows), five 1 s windows: 3.686406 3.686402 3.686401 3.686401 3.686402 GHz | median 3.686402 GHz
+
+pre-scan and sizing (untimed, 98.3 s; placement causal)
+  placement causal: every ladder 2,048 ticks; each book centers it on its first add and re-centers it on its midpoint after 8 near-touch misses, grid $0.01 at or above $1.00 and $0.0001 below, from the messages already applied (the moves are inside the timed loop); pool and id-map capacities from the pre-scan
+  file 01302019.NASDAQ_ITCH50 | chunk 268,435,456 bytes | ladder budget 1,024 MB
+  bytes 11,245,883,092 | messages 368,366,634 | trailing bytes 0 | bad_length 0 | pre-scan 90.6 s
+  by type:
+    A 162,970,455 | B 116 | C 158,886 | D 158,273,361 | E 8,096,995 | F 1,725,898 | H 8,805 | I 3,684,511 | J 62
+    L 193,769 | P 1,326,184 | Q 17,430 | R 8,714 | S 6 | U 27,222,746 | V 1 | X 4,669,874 | Y 8,821
+  books 8,695 | ladders 859 MB | pools 2,276,721 slots | id maps 6,642,368 slots | adds 191,919,099, on the ladders (predicted) not predicted: causal ladders move
+
+per-message latency | thread pinned to cpu 1 | every message timed
+  timed region per message: the book lookup by stock_locate and itch::dispatch_checked<WireUnits>(), between rdtsc_begin() (lfence; rdtsc) and rdtsc_end() (rdtscp; lfence)
+  empty timer pair, 100,000 samples: min 36 | p50 40 | p99 42 cycles (before the pass, after 0.5 s of busy spinning; measured again after every chunk and after the pass)
+  chunk   1 | messages   9,031,559 | through     9,031,559 | timed   0.8318 s |    92.1 ns/msg | book digest c1909233da6bd73d
+  chunk   2 | messages   7,661,645 | through    16,693,204 | timed   1.8643 s |   243.3 ns/msg | book digest 35ace202b2372ba5
+  chunk   3 | messages   8,813,751 | through    25,506,955 | timed   2.1639 s |   245.5 ns/msg | book digest ee12c413e7aec9d7
+  chunk   4 | messages   8,830,271 | through    34,337,226 | timed   2.4288 s |   275.1 ns/msg | book digest e3ebf4f7728624b1
+  chunk   5 | messages   8,841,081 | through    43,178,307 | timed   2.4506 s |   277.2 ns/msg | book digest c7ce2d3b7d1aef38
+  chunk   6 | messages   8,841,918 | through    52,020,225 | timed   2.2693 s |   256.7 ns/msg | book digest 768d5e3b4d4aadf7
+  chunk   7 | messages   8,851,274 | through    60,871,499 | timed   2.3451 s |   264.9 ns/msg | book digest edc89b1c4e7dff5c
+  chunk   8 | messages   8,847,290 | through    69,718,789 | timed   2.6307 s |   297.4 ns/msg | book digest 98297ac800eef764
+  chunk   9 | messages   8,850,279 | through    78,569,068 | timed   2.3804 s |   269.0 ns/msg | book digest 6d80cf185da2bbdd
+  chunk  10 | messages   8,846,957 | through    87,416,025 | timed   2.4972 s |   282.3 ns/msg | book digest f3b833d52eb39d77
+  chunk  11 | messages   8,857,810 | through    96,273,835 | timed   2.2349 s |   252.3 ns/msg | book digest 9d4ff7a281bdb6e0
+  chunk  12 | messages   8,864,485 | through   105,138,320 | timed   2.5465 s |   287.3 ns/msg | book digest 3539b159cef55427
+  chunk  13 | messages   8,867,382 | through   114,005,702 | timed   2.4834 s |   280.1 ns/msg | book digest 13089b390423ecf2
+  chunk  14 | messages   8,869,373 | through   122,875,075 | timed   2.5164 s |   283.7 ns/msg | book digest 1d08a678f7aee3e6
+  chunk  15 | messages   8,870,777 | through   131,745,852 | timed   2.3689 s |   267.0 ns/msg | book digest b661faf7e007c261
+  chunk  16 | messages   8,866,806 | through   140,612,658 | timed   2.4022 s |   270.9 ns/msg | book digest 1cab53b2d448467a
+  chunk  17 | messages   8,871,247 | through   149,483,905 | timed   2.5289 s |   285.1 ns/msg | book digest b244fa143bbecd97
+  chunk  18 | messages   8,865,332 | through   158,349,237 | timed   2.3242 s |   262.2 ns/msg | book digest 58de849165da44e9
+  chunk  19 | messages   8,867,569 | through   167,216,806 | timed   2.5049 s |   282.5 ns/msg | book digest ab5b53009cf94f22
+  chunk  20 | messages   8,869,363 | through   176,086,169 | timed   2.4717 s |   278.7 ns/msg | book digest 8a7cc9c9efbe72d7
+  chunk  21 | messages   8,868,798 | through   184,954,967 | timed   2.4880 s |   280.5 ns/msg | book digest fce256ccb933d38c
+  chunk  22 | messages   8,872,867 | through   193,827,834 | timed   2.4267 s |   273.5 ns/msg | book digest 40564c8496d17813
+  chunk  23 | messages   8,868,122 | through   202,695,956 | timed   2.3523 s |   265.3 ns/msg | book digest bc6bbc54243e09bc
+  chunk  24 | messages   8,873,013 | through   211,568,969 | timed   2.4203 s |   272.8 ns/msg | book digest 6e1337417720f0e4
+  chunk  25 | messages   8,891,831 | through   220,460,800 | timed   2.4320 s |   273.5 ns/msg | book digest 9fa9ae8a6b67f58b
+  chunk  26 | messages   8,802,894 | through   229,263,694 | timed   2.6040 s |   295.8 ns/msg | book digest 08bb89ee4a41757d
+  chunk  27 | messages   8,807,774 | through   238,071,468 | timed   2.4413 s |   277.2 ns/msg | book digest d7a6282e1d4be426
+  chunk  28 | messages   8,852,723 | through   246,924,191 | timed   2.5308 s |   285.9 ns/msg | book digest 44a8ba4e5ddc385f
+  chunk  29 | messages   8,855,881 | through   255,780,072 | timed   2.3995 s |   270.9 ns/msg | book digest 7b35102f956db9e3
+  chunk  30 | messages   8,859,057 | through   264,639,129 | timed   2.5372 s |   286.4 ns/msg | book digest 2a685e39ad38295d
+  chunk  31 | messages   8,856,447 | through   273,495,576 | timed   2.3739 s |   268.0 ns/msg | book digest f36646e40a160529
+  chunk  32 | messages   8,853,835 | through   282,349,411 | timed   2.4452 s |   276.2 ns/msg | book digest a62c831486d02a27
+  chunk  33 | messages   8,852,125 | through   291,201,536 | timed   2.6971 s |   304.7 ns/msg | book digest 92c8a5e78cdf802f
+  chunk  34 | messages   8,845,598 | through   300,047,134 | timed   2.5550 s |   288.8 ns/msg | book digest 847e4a5e546e8347
+  chunk  35 | messages   8,852,137 | through   308,899,271 | timed   2.5007 s |   282.5 ns/msg | book digest feacd1deeffb74ff
+  chunk  36 | messages   8,842,900 | through   317,742,171 | timed   2.5993 s |   293.9 ns/msg | book digest d0ed479cc3c54eab
+  chunk  37 | messages   8,846,111 | through   326,588,282 | timed   2.4051 s |   271.9 ns/msg | book digest cb79a5f6bbf9880f
+  chunk  38 | messages   8,844,406 | through   335,432,688 | timed   2.2773 s |   257.5 ns/msg | book digest dd51f7b2c94ca7fc
+  chunk  39 | messages   8,821,644 | through   344,254,332 | timed   2.5176 s |   285.4 ns/msg | book digest 8d87d117d6e96b0e
+  chunk  40 | messages   8,782,265 | through   353,036,597 | timed   2.1983 s |   250.3 ns/msg | book digest f091db4758ed7028
+  chunk  41 | messages   7,521,990 | through   360,558,587 | timed   1.8372 s |   244.2 ns/msg | book digest 60722612a9a7c632
+  chunk  42 | messages   7,808,047 | through   368,366,634 | timed   2.3283 s |   298.2 ns/msg | book digest f7d5c6e84735b480
+
+result (per-message latency, cpu 1; chunk times above include the timers and are not throughput)
+  TSC over the whole pass (108.8 s): 3.686401 GHz; ns = cycles / 3.686401
+  empty timer pair after each chunk, 10,000 samples each, min cycles:
+    38 48 96 38 40 38 52 128 44 66 54 116 56 116 44 44 44 56 44 42 64
+    44 44 68 76 42 40 42 68 42 38 48 38 88 98 98 38 52 46 64 44 44
+  empty timer pair after the pass, 100,000 samples: min 36 | p50 40 | p99 44 cycles
+  subtracted from every sample, clamped at 0: 36 cycles, the smallest minimum seen (before the pass 36, after the chunks 38 to 128, after the pass 36)
+  samples clamped to 0 after overhead subtraction: 0
+  percentiles are nearest-rank over every sample
+
+  TSC cycles
+  type       messages |     mean |     min |     p50 |     p90 |     p99 |    p99.9 |   p99.99 |        max
+  A       162,970,455 |    707.8 |      26 |     650 |    1154 |    2468 |     3888 |    21398 |    6749904
+  F         1,725,898 |    909.5 |      26 |     686 |    1776 |    3896 |    12578 |    46212 |    2244650
+  E         8,096,995 |    951.4 |      24 |     676 |    2230 |    4132 |     5464 |    24222 |    1653238
+  C           158,886 |    712.7 |      28 |     346 |    1742 |    4032 |     5492 |    21834 |      58650
+  X         4,669,874 |    559.2 |      26 |     248 |    1426 |    3532 |     5944 |    20680 |    1152868
+  D       158,273,361 |    958.2 |      30 |     670 |    2252 |    4110 |     6052 |    24194 |   14896114
+  U        27,222,746 |   1114.3 |      38 |     812 |    2054 |    4106 |    12932 |    37368 |    3921298
+  other     5,248,419 |     41.7 |       4 |      28 |      84 |     204 |      616 |     1054 |      67806
+  orders  363,118,215 |    851.9 |      24 |     662 |    1826 |    3760 |     6242 |    23756 |   14896114
+  all     368,366,634 |    840.4 |       4 |     656 |    1814 |    3750 |     6194 |    23640 |   14896114
+
+  nanoseconds
+  type       messages |     mean |     min |     p50 |     p90 |     p99 |    p99.9 |   p99.99 |        max
+  A       162,970,455 |    192.0 |       7 |     176 |     313 |     669 |     1055 |     5805 |    1831028
+  F         1,725,898 |    246.7 |       7 |     186 |     482 |    1057 |     3412 |    12536 |     608900
+  E         8,096,995 |    258.1 |       7 |     183 |     605 |    1121 |     1482 |     6571 |     448469
+  C           158,886 |    193.3 |       8 |      94 |     473 |    1094 |     1490 |     5923 |      15910
+  X         4,669,874 |    151.7 |       7 |      67 |     387 |     958 |     1612 |     5610 |     312735
+  D       158,273,361 |    259.9 |       8 |     182 |     611 |    1115 |     1642 |     6563 |    4040828
+  U        27,222,746 |    302.3 |      10 |     220 |     557 |    1114 |     3508 |    10137 |    1063720
+  other     5,248,419 |     11.3 |       1 |       8 |      23 |      55 |      167 |      286 |      18394
+  orders  363,118,215 |    231.1 |       7 |     180 |     495 |    1020 |     1693 |     6444 |    4040828
+  all     368,366,634 |    228.0 |       1 |     178 |     492 |    1017 |     1680 |     6413 |    4040828
+
+  messages that placed or moved a ladder (included in the rows above): 27,343 | p50 1421 | p90 8214 | p99 56908 | max 532113 ns
+
+  messages 368,366,634 of 368,366,634 | trailing bytes 0 | bad_length 0 | dropped_out_of_band 0 | unknown order id 0
+  adds on a ladder 190,757,952 | adds in the overflow 1,161,147 (predicted none: causal ladders move) | resting orders at end of file 0
+  causal ladders: placed 8,695 | re-centered 18,648 times | levels moved 908,796 | orders relinked 2,626,046
+  book digest chain over 42 chunk boundaries: 17b49d11d49913b3
+  checks: PASS
+wall time after setup 110 s
+
+RESULT: PASS
+exit 0

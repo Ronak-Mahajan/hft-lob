@@ -12,6 +12,15 @@
 // (base, tick, band) so the boundary prices are the ones a book built with
 // the same parameters actually straddles. Output is the length-prefixed
 // BinaryFILE framing that NASDAQ's historical files use.
+//
+// set_drift(d) makes the prices wander, as a real day's do: before every
+// message one symbol's window moves by up to d of its ticks either way, and
+// prices are drawn by side around the window's middle, as in a real book:
+// most bids a few ticks below it and most asks a few above, some deeper or
+// past the window's edges, some between grid points, and stub quotes near $0
+// (bids) and near the top of the price range (asks). Books whose ladders move
+// with the market (lob::Recenter) are tested on it. With no drift (the
+// default) the stream is exactly what it always was.
 // ---------------------------------------------------------------------------
 #include <cstdint>
 #include <cstring>
@@ -35,6 +44,8 @@ public:
     WireGen(uint64_t seed, std::vector<WireSymbol> syms, size_t max_live = 50000)
         : s_(seed), syms_(std::move(syms)), max_live_(max_live) {}
 
+    void set_drift(uint32_t max_ticks) { drift_ = max_ticks; }
+
     // Appends the start-of-day messages and n more messages, most of them
     // order messages, to `bytes`.
     void generate(size_t n) {
@@ -42,6 +53,7 @@ public:
         for (const WireSymbol& s : syms_) directory(s);
         system_event('Q');
         for (size_t i = 0; i < n; ++i) {
+            if (drift_) wander();
             uint32_t r = below(100);
             if (r < 3) { filler(); continue; }
             const WireSymbol& s = syms_[below(static_cast<uint32_t>(syms_.size()))];
@@ -62,7 +74,7 @@ public:
     size_t live_orders() const { return live_.size(); }
 
 private:
-    struct Live { uint64_t ref; uint16_t locate; uint32_t shares; };
+    struct Live { uint64_t ref; uint16_t locate; uint32_t shares; char side = 'B'; };
 
     uint64_t next() {                                   // SplitMix64
         uint64_t z = (s_ += 0x9E3779B97F4A7C15ull);
@@ -140,16 +152,37 @@ private:
         return p > 0xFFFFFFFFu ? 0xFFFFFFFFu : static_cast<uint32_t>(p);
     }
 
+    // With drift: a price for one side of a book whose market is the middle
+    // of the symbol's current window.
+    uint32_t side_price(const WireSymbol& s, char side) {
+        const int64_t t = s.tick, half = s.band / 2;
+        const int64_t mid = int64_t{s.base} + half * t;
+        const int64_t dir = side == 'B' ? -1 : 1;           // away from the middle
+        uint32_t r = below(100);
+        int64_t p;
+        if (r < 70)       p = mid + dir * t * (1 + below(static_cast<uint32_t>(half / 4 + 1)));     // near the touch
+        else if (r < 80)  p = mid + dir * t * (1 + below(static_cast<uint32_t>(half)));             // in the window
+        else if (r < 86)  p = mid + dir * (t * below(static_cast<uint32_t>(half)) + 1 + below(static_cast<uint32_t>(t)));  // off the grid
+        else if (r < 93)  p = mid + dir * t * (half + below(static_cast<uint32_t>(2 * half + 1)));  // past the window
+        else if (r < 95)  p = side == 'B' ? int64_t{s.base} : int64_t{s.base} + (2 * half - 1) * t; // the window's edge
+        else if (r < 98)  p = side == 'B' ? 1 + below(100) : 1'999'999'900;                          // stub quotes
+        else              p = side == 'B' ? 100 * (1 + below(10)) : 0xFFFFFFFFll - below(3);
+        if (p < 1) p = 1;
+        if (p > 0xFFFFFFFFll) p = 0xFFFFFFFFll;
+        return static_cast<uint32_t>(p);
+    }
+
     void add(const WireSymbol& s) {
         uint64_t ref = ++next_ref_;
         char side = (next() & 1) ? 'B' : 'S';
         uint32_t shares = 1 + below(900);
         bool mpid = (next() & 3) == 0;
         header(mpid ? 'F' : 'A', mpid ? 40 : 36, s.locate);
-        p64(ref); p8(static_cast<uint8_t>(side)); p32(shares); pstr(s.name, 8); p32(price_for(s));
+        p64(ref); p8(static_cast<uint8_t>(side)); p32(shares); pstr(s.name, 8);
+        p32(drift_ ? side_price(s, side) : price_for(s));
         if (mpid) pstr("MPID", 4);
         pos_[ref] = live_.size();
-        live_.push_back({ref, s.locate, shares});
+        live_.push_back({ref, s.locate, shares, side});
     }
     size_t pick() { return below(static_cast<uint32_t>(live_.size())); }
     void drop(size_t i) {
@@ -190,13 +223,25 @@ private:
         uint64_t ref = ++next_ref_;
         uint32_t shares = 1 + below(900);
         header('U', 35, o.locate);
-        p64(o.ref); p64(ref); p32(shares); p32(price_for(*s));
+        p64(o.ref); p64(ref); p32(shares); p32(drift_ ? side_price(*s, o.side) : price_for(*s));
         drop(i);
         pos_[ref] = live_.size();
-        live_.push_back({ref, o.locate, shares});
+        live_.push_back({ref, o.locate, shares, o.side});
+    }
+
+    // One symbol's window moves by up to drift_ ticks, staying clear of $0
+    // and of the top of the u32 price range.
+    void wander() {
+        WireSymbol& w = syms_[below(static_cast<uint32_t>(syms_.size()))];
+        const int64_t step = static_cast<int64_t>(below(2 * drift_ + 1)) - static_cast<int64_t>(drift_);
+        const int64_t nb = static_cast<int64_t>(w.base) + step * static_cast<int64_t>(w.tick);
+        const int64_t lo = int64_t{w.tick} * 64;
+        const int64_t hi = (int64_t{1} << 32) - int64_t{w.band + 64} * w.tick;
+        if (nb >= lo && nb < hi) w.base = static_cast<uint32_t>(nb);
     }
 
     uint64_t s_;
+    uint32_t drift_ = 0;
     std::vector<WireSymbol> syms_;
     size_t max_live_;
     std::vector<Live> live_;
