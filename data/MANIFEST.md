@@ -1,7 +1,9 @@
-# Data manifest: NASDAQ TotalView-ITCH 5.0, 2019-01-30
+# Data manifest: NASDAQ TotalView-ITCH 5.0, 2019-01-30 and 2019-12-30
 
-The recorded-day results in `results/` come from one file: NASDAQ's public
-TotalView-ITCH 5.0 sample capture for Wednesday 2019-01-30. The data is
+The recorded-day results in `results/` come from two files: NASDAQ's public
+TotalView-ITCH 5.0 sample capture for Wednesday 2019-01-30, and, for the
+ladder placement comparison only, the capture for Monday 2019-12-30 (see
+*The second day* below). The data is
 NASDAQ's and is not in this repository, in whole or in part. This manifest
 identifies the file exactly and lists the commands that produce every file in
 `results/` from a fresh download.
@@ -54,6 +56,22 @@ The two counts are identical.
 | `V` | MWCB Decline Level | 1 |
 | | **total** | **368,366,634** |
 
+## The second day
+
+| | |
+|---|---|
+| Source | https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/ |
+| File | `12302019.NASDAQ_ITCH50.gz` |
+| Compressed size | 3,524,013,057 bytes |
+| Compressed SHA-256 | `ef03df46a27e6bda4dead017f84c2e3979df7211f02c7868b51d53fceb99c689` |
+| Decompressed file | `12302019.NASDAQ_ITCH50` |
+| Decompressed size | 8,251,407,909 bytes |
+| Decompressed SHA-256 | `5d81c2e14a0f748b29c674b6a342796932702034b4dd341e39e9a9ec5bac610f` |
+| Messages | 268,744,780 (the file ends exactly on a message boundary) |
+
+Sizes and hashes are also in `results/perf_20191230_causal_env.log`; the
+message counts by type are in `results/replay_20191230_causal_differential.log`.
+
 ## Getting it
 
 From the repository root (`data/` is ignored by git except for this file):
@@ -62,6 +80,8 @@ From the repository root (`data/` is ignored by git except for this file):
 mkdir -p data && cd data
 curl -O "https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/01302019.NASDAQ_ITCH50.gz"
 gzip -dc 01302019.NASDAQ_ITCH50.gz > 01302019.NASDAQ_ITCH50
+curl -O "https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/12302019.NASDAQ_ITCH50.gz"     # the second day
+gzip -dc 12302019.NASDAQ_ITCH50.gz > 12302019.NASDAQ_ITCH50
 sh ../tools/data_manifest.sh          # sizes and hashes; compare with the table above
 cd ..
 ```
@@ -97,19 +117,20 @@ Which commit each committed log was built from:
 | `perf_20190130_placement_*_throughput.log` | `09da5d0` (printed in each log; build lines in `perf_20190130_placement_env.log`) |
 | `perf_20190130_placement_*_latency*.log` | `62f8be9` (printed in each log; build lines in `perf_20190130_placement_latency_env.log`) |
 | `itch_count_20190130.log` | `2f2082f` (build line at the top of the log) |
+| `replay_2019*_causal_differential.log`, `perf_2019*_causal_*.log` | `b8ea69f` (printed in each log; build lines in `perf_20190130_causal_env.log`) |
+| `mutants_moving_ladder.log` | the sources of `16db8f1`, built by the script itself |
 
-At the commit that last updated this manifest: `lob_replay` compiles exactly
-the sources of `d191efd`. `lob_bench` differs from `fc9b010` only in the
-reference comparison code of its checks 6 and 7 (`src/book_diff.hpp`,
-`src/replay_run.hpp`), not in the code its benchmarks time. `lob_parallel`
-compiles exactly the sources of `fc9b010`. `lob_perf` differs from `380902a`
-in `clock_of()` in `src/replay_day.hpp`, which formats timestamps in log
-lines, and in the `--placement` option, whose default is the placement of
-every earlier run; its timed loops are unchanged. `lob_perf_latency` also
-measures the empty timer pair throughout the pass and subtracts it when the
-percentiles are read (`62f8be9`). Both compile exactly the sources of
-`62f8be9`. `tools/itch_count.cpp` is unchanged since `2f2082f`. To build
-exactly the source a log names, `git checkout` that commit first.
+At the commit that last updated this manifest, `lob_replay`, `lob_perf`
+and `lob_perf_latency` compile exactly the sources of `b8ea69f`, the build
+of the `*_causal_*` logs. Their default placement, `prescan`, is the
+placement of every earlier log, and the ladder hot path is the same code;
+since the builds of the earlier logs they gained `--placement causal`,
+`--recenter-after` and, in `lob_perf_latency`, the moving-ladder latency
+line. `lob_bench` gained checks 8 and 9 and `--only`; the `LimitOrderBook`
+code its benchmarks time is unchanged apart from `add()` calling a
+force-inlined helper, as is the engine `lob_parallel` times.
+`tools/itch_count.cpp` is unchanged since `2f2082f`. To build exactly the
+source a log names, `git checkout` that commit first.
 
 ## Reproducing every file in `results/`
 
@@ -138,6 +159,11 @@ Run from `data/`, with the decompressed file there:
 | `perf_20190130_repro_throughput.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50`, built from `1ed03a6` |
 | `perf_20190130_placement_prescan_throughput.log`, `perf_20190130_placement_firstadd_throughput.log` | `run ... $R/lob_perf.exe 01302019.NASDAQ_ITCH50`, then the same with `--placement first-add`, built from `09da5d0` |
 | `perf_20190130_placement_prescan_latency_1.log`, `perf_20190130_placement_firstadd_latency.log`, `perf_20190130_placement_prescan_latency_2.log` | `run ... $R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50`, the same with `--placement first-add`, then the first again, built from `62f8be9` |
+| `replay_20190130_causal_differential.log` | `run ... $R/lob_replay.exe 01302019.NASDAQ_ITCH50 --differential --placement causal` |
+| `replay_20191230_causal_differential.log` | `run ... $R/lob_replay.exe 12302019.NASDAQ_ITCH50 --differential --placement causal --symbols AAPL,MSFT,AMZN,BKNG` |
+| `perf_20190130_causal_{prescan,firstadd,causal}_throughput_{1..5}.log` | `$R/lob_perf.exe 01302019.NASDAQ_ITCH50 --cpu 1 --placement P` for P = `prescan`, `first-add`, `causal`, 15 runs interleaved in the order recorded in `perf_20190130_causal_env.log` |
+| `perf_20190130_causal_{prescan,firstadd,causal}_latency_{1,2}.log` | `$R/lob_perf_latency.exe 01302019.NASDAQ_ITCH50 --cpu 1 --placement P`, in the order prescan, first-add, causal, causal, first-add, prescan |
+| `perf_20191230_causal_*.log` | the same two batches on `12302019.NASDAQ_ITCH50`, one latency run per placement (order in `perf_20191230_causal_env.log`) |
 
 No market data needed, from any directory:
 
@@ -149,12 +175,15 @@ No market data needed, from any directory:
 | `replay_selftest.log` | `run replay_selftest.log ./lob_replay.exe --selftest` |
 | `official_close_yahoo_20190130.log` | `bash tools/official_close_yahoo.sh > results/official_close_yahoo_20190130.log` (network; rerun on 2026-09-21, its output differed from the committed log only in the fetch time on the first line) |
 | `official_close_nasdaq_20190130.log` | `bash tools/official_close_nasdaq.sh > results/official_close_nasdaq_20190130.log` (network) |
-| `perf_20190130.json` | `perl tools/perf_json.pl results > results/perf_20190130.json` (built from the committed logs; refuses if any run failed or printed a book digest different from the differential run's) |
+| `perf_20190130.json` | `perl tools/perf_json.pl results > results/perf_20190130.json` (built from the committed logs; refuses if any run failed, a placement-batch run was not on AC power, or any run printed a book digest different from its day's differential run) |
+| `perf_20191230.json` | `perl tools/perf_json.pl results 20191230 > results/perf_20191230.json` |
+| `mutants_moving_ladder.log` | `perl tools/mutants_moving_ladder.pl` from the repository root (about 7 minutes), with the header lines written by hand |
 
 Recorded by the scripts that ran the batches:
 
 - `perf_20190130_run_env.log`, `perf_20190130_repro_env.log`,
   `perf_20190130_placement_env.log`, `perf_20190130_placement_latency_env.log`,
+  `perf_20190130_causal_env.log`, `perf_20191230_causal_env.log`,
   `replay_run_env.log` and `replay_synthetic_run_env.log`: the build lines,
   the run order, and before each run the power state, the power plan and the
   processes that used the most CPU in the preceding 5 s. Each batch ran back
