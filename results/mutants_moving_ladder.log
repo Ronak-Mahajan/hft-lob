@@ -1,0 +1,26 @@
+perl tools/mutants_moving_ladder.pl, run on 2026-09-22 against the sources of 16db8f1 (include/ and src/ as
+they are at b8ea69f), g++ 16.1.0 -std=c++20 -O2 -Wall -Wextra -pthread. KILLED(n): the test exited with
+status n (1: a failed check; 127 / 139: the process stopped, e.g. LOB_ASSERT or a crash). The
+compiler warnings M8 provokes (an unused variable) are left out.
+
+id    bug planted in include/lob/book.hpp                                      8a        8b        8c        8d        9         selftest 
+none  unmodified sources                                                       pass      pass      pass      pass      pass      pass     
+M1    levels that stay on the ladder keep their old level_idx after a shift    KILLED(1) KILLED(1) pass      pass      KILLED(139) KILLED(139)
+M2    levels that leave the ladder keep a ladder level_idx                     KILLED(1) KILLED(1) KILLED(1) KILLED(1) KILLED(127) KILLED(139)
+M3    levels pulled onto the ladder are not marked in the bitmap               KILLED(1) pass      KILLED(1) KILLED(1) KILLED(127) KILLED(127)
+M4    a shift visits the levels in the wrong direction                         pass      pass      pass      pass      KILLED(127) KILLED(127)
+M5    the pull onto the ladder stops one tick short of its top                 pass      pass      pass      pass      KILLED(127) KILLED(127)
+M6    the cached best is not rebuilt after levels come onto the ladder         pass      pass      KILLED(1) KILLED(1) KILLED(1) KILLED(1)
+M7    a slot a level left is not cleared                                       KILLED(1) KILLED(1) KILLED(1) KILLED(1) KILLED(127) KILLED(139)
+                 from src/replay_main.cpp:65:
+M8    adds deep in the book count as near-touch misses                         KILLED(1) pass      KILLED(1) pass      pass      pass     
+M9    adds off the would-be grid count as near-touch misses                    pass      pass      pass      KILLED(1) pass      pass     
+M10   a move never changes the grid                                            pass      pass      KILLED(1) pass      KILLED(1) KILLED(1)
+M11   a move does not reset the near-touch miss count                          KILLED(1) pass      pass      pass      pass      pass     
+test 8a        kills 6 of 11 mutants
+test 8b        kills 3 of 11 mutants
+test 8c        kills 6 of 11 mutants
+test 8d        kills 5 of 11 mutants
+test 9         kills 8 of 11 mutants
+test selftest  kills 8 of 11 mutants
+RESULT: every mutant killed, every test kills at least one
