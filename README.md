@@ -420,7 +420,7 @@ and is the same in every run of a day.
 | Best-price rediscovery | occupancy bitmap + `tzcnt`/`lzcnt` (64 prices per instruction; the next level is almost always in the same word because activity clusters at the inside) | linear level scan |
 | Queue at a level | intrusive doubly-linked FIFO via pool indices | `std::list` / `std::deque` per level |
 | Side dispatch | `BookSide<IsBid>` template; comparison and scan direction compile-time | runtime branch per touch |
-| Parsing | `#pragma pack(1)` wire-mirror structs + `reinterpret_cast` + one `bswap` per field, after the length prefix is checked against the ITCH 5.0 table | field-by-field copy-out |
+| Parsing | `#pragma pack(1)` wire-mirror structs give each field's offset and type; each field is read from the receive buffer with a fixed-size `std::memcpy` (one load, the code a pointer cast would give) + one `bswap`, after the length prefix is checked against the ITCH 5.0 table | `reinterpret_cast` onto the buffer (undefined behavior under strict aliasing), or decoding each message into an intermediate struct first |
 | Threading | single writer per book (the feed is inherently sequential); shard symbols across cores, SPSC rings at the edges | locks/atomics inside the book |
 
 **Multi-core mechanics** (`include/lob/spsc.hpp`, `include/lob/engine.hpp`).
@@ -583,9 +583,9 @@ CI checks correctness, not speed: the messages/second a shared runner prints
 under `--quick` are not measurements.
 
 Guards make a bad run loud. A length prefix that disagrees with the per-type
-ITCH table is refused before any cast and counted (`bad_length`). The id map
-holds at most capacity - 1 keys, so every probe ends at an empty slot, and
-aborts on an insert past that; the book checks pool <= idmap / 2
+ITCH table is refused and counted (`bad_length`) before any field is read.
+The id map holds at most capacity - 1 keys, so every probe ends at an empty
+slot, and aborts on an insert past that; the book checks pool <= idmap / 2
 at construction, and the SPSC ring checks that a message fits its slot. Those
 three are `LOB_ASSERT`: one branch to a cold function that writes the failed
 condition, its message and its file and line to stderr and calls

@@ -9,21 +9,18 @@
 // * In the standard file format (and inside a MoldUDP64 packet) each message
 //   is prefixed with a u16 big-endian length.
 //
-// Zero-copy strategy: declare #pragma pack(1) structs that mirror the wire
-// layout byte-for-byte (verified by static_assert on sizeof), then
-// reinterpret_cast the buffer pointer. Nothing is copied out of the receive
-// buffer; the only per-field cost is the unavoidable bswap (one instruction).
-//
-// Aliasing note: casting char* → struct* is formally UB under strict
-// aliasing; in practice every HFT shop does exactly this on x86 where
-// unaligned loads are free, and packed structs force byte-granular access.
-// The fully-portable alternative (memcpy into a local struct) compiles to
-// the *same* instructions on GCC/Clang -O2; use it if you need to satisfy
-// UBSan. We keep the cast for clarity of intent.
+// Decoding: #pragma pack(1) structs mirror the wire layout byte for byte
+// (static_assert on every sizeof) and name each field's offset and type.
+// dispatch() reads each field it needs with std::memcpy from the receive
+// buffer (load(), through LOB_WIRE): defined behavior at any alignment, and
+// one load per field, the instructions a pointer cast onto the buffer would
+// give. Nothing is copied out of the buffer first; the only other per-field
+// cost is one bswap.
 // ---------------------------------------------------------------------------
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
 
 #include "book.hpp"
 #include "common.hpp"
@@ -146,6 +143,25 @@ static_assert(sizeof(CrossTrade) == 40);
 
 #pragma pack(pop)
 
+// 'F' and 'C' extend 'A' and 'E': the shared fields sit at the same offsets.
+static_assert(offsetof(AddOrderMPID, base) == 0 && offsetof(OrderExecutedPrice, base) == 0);
+
+// One field of a wire message: the F at byte `off` of the message at `p`.
+// std::memcpy is defined for any alignment, and a fixed 1- to 8-byte copy
+// compiles to a single load. Fields are read one at a time, not the whole
+// struct, so the compiler never materializes a copy of the message.
+template <typename F>
+LOB_FORCE_INLINE F load(const uint8_t* p, size_t off) {
+    static_assert(std::is_trivially_copyable_v<F>);
+    F v;
+    std::memcpy(&v, p + off, sizeof v);
+    return v;
+}
+
+// load() of member `field` of wire struct `Msg`, e.g. LOB_WIRE(AddOrder, price, p).
+#define LOB_WIRE(Msg, field, p) \
+    ::lob::itch::load<decltype(Msg::field)>((p), offsetof(Msg, field))
+
 // 48-bit big-endian timestamp (nanoseconds since midnight) at bytes 5..10 of
 // every ITCH 5.0 message.
 LOB_FORCE_INLINE uint64_t timestamp_ns(const uint8_t* msg) {
@@ -190,7 +206,7 @@ static_assert(spec_len('R') == sizeof(StockDirectory) && spec_len('Q') == sizeof
 // Per-type expected wire length for every message type this build models.
 // 0 = not modeled (system/admin messages), which the callers skip by the
 // stream's length prefix. dispatch_checked() compares the prefix against
-// this table BEFORE any reinterpret_cast, so a truncated or corrupt message
+// this table BEFORE any field is read, so a truncated or corrupt message
 // can never be read past its own bytes.
 constexpr uint16_t expected_len(uint8_t type) {
     switch (static_cast<char>(type)) {
@@ -225,46 +241,39 @@ static_assert(spec_len('A') == expected_len('A') && spec_len('F') == expected_le
 template <typename Units = CentTicks, typename Book>
 LOB_FORCE_INLINE size_t dispatch(Book& book, const uint8_t* p) {
     switch (static_cast<char>(*p)) {
-    case 'A': {
-        auto* m = reinterpret_cast<const AddOrder*>(p);
-        book.add(be64(m->order_ref),
-                 m->side == 'B' ? Side::Bid : Side::Ask,
-                 Units::convert(m->price), be32(m->shares));
+    case 'A':
+        book.add(be64(LOB_WIRE(AddOrder, order_ref, p)),
+                 LOB_WIRE(AddOrder, side, p) == 'B' ? Side::Bid : Side::Ask,
+                 Units::convert(LOB_WIRE(AddOrder, price, p)),
+                 be32(LOB_WIRE(AddOrder, shares, p)));
         return sizeof(AddOrder);
-    }
-    case 'F': {
-        auto* m = reinterpret_cast<const AddOrderMPID*>(p);
-        book.add(be64(m->base.order_ref),
-                 m->base.side == 'B' ? Side::Bid : Side::Ask,
-                 Units::convert(m->base.price), be32(m->base.shares));
+    case 'F':                                      // an 'A' followed by the MPID
+        book.add(be64(LOB_WIRE(AddOrder, order_ref, p)),
+                 LOB_WIRE(AddOrder, side, p) == 'B' ? Side::Bid : Side::Ask,
+                 Units::convert(LOB_WIRE(AddOrder, price, p)),
+                 be32(LOB_WIRE(AddOrder, shares, p)));
         return sizeof(AddOrderMPID);
-    }
-    case 'E': {
-        auto* m = reinterpret_cast<const OrderExecuted*>(p);
-        book.execute(be64(m->order_ref), be32(m->executed_shares));
+    case 'E':
+        book.execute(be64(LOB_WIRE(OrderExecuted, order_ref, p)),
+                     be32(LOB_WIRE(OrderExecuted, executed_shares, p)));
         return sizeof(OrderExecuted);
-    }
-    case 'C': {
-        auto* m = reinterpret_cast<const OrderExecutedPrice*>(p);
-        book.execute(be64(m->base.order_ref), be32(m->base.executed_shares));
+    case 'C':                                      // an 'E' followed by the price
+        book.execute(be64(LOB_WIRE(OrderExecuted, order_ref, p)),
+                     be32(LOB_WIRE(OrderExecuted, executed_shares, p)));
         return sizeof(OrderExecutedPrice);
-    }
-    case 'X': {
-        auto* m = reinterpret_cast<const OrderCancel*>(p);
-        book.cancel(be64(m->order_ref), be32(m->canceled_shares));
+    case 'X':
+        book.cancel(be64(LOB_WIRE(OrderCancel, order_ref, p)),
+                    be32(LOB_WIRE(OrderCancel, canceled_shares, p)));
         return sizeof(OrderCancel);
-    }
-    case 'D': {
-        auto* m = reinterpret_cast<const OrderDelete*>(p);
-        book.remove(be64(m->order_ref));
+    case 'D':
+        book.remove(be64(LOB_WIRE(OrderDelete, order_ref, p)));
         return sizeof(OrderDelete);
-    }
-    case 'U': {
-        auto* m = reinterpret_cast<const OrderReplace*>(p);
-        book.replace(be64(m->orig_ref), be64(m->new_ref),
-                     Units::convert(m->price), be32(m->shares));
+    case 'U':
+        book.replace(be64(LOB_WIRE(OrderReplace, orig_ref, p)),
+                     be64(LOB_WIRE(OrderReplace, new_ref, p)),
+                     Units::convert(LOB_WIRE(OrderReplace, price, p)),
+                     be32(LOB_WIRE(OrderReplace, shares, p)));
         return sizeof(OrderReplace);
-    }
     default:
         return 0;   // system/admin messages not modeled in this build
     }
