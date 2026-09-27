@@ -438,15 +438,15 @@ the book itself. In the ring:
   Shared state and taxes every producer push with an RFO
 - 64-byte message slots: one line per message, hardware-prefetch friendly
 
-**Scope of the concurrency claim.** Nothing in this repo takes a mutex, and
-the ring's `try_push` / `consume_batch` are wait-free: each finishes in a
-bounded number of steps, with no retry loop inside the operation. The book
-itself is not a lock-free data structure and does not need to be. It is
-**single-writer**, which is why it needs no synchronization at all, and
-sharding by `stock_locate` is what makes it scale. The pipeline as a whole is
-not non-blocking: the rings are bounded, so a full ring makes the demux spin
-until its worker drains it. `spsc_stress` prints that full-stall count on
-every run.
+**Concurrency model.** Nothing in this repo takes a mutex, and the ring's
+`try_push` / `consume_batch` are wait-free: each finishes in a bounded
+number of steps, with no retry loop inside the operation. Each book is
+**single-writer**: one worker thread owns it, so the book has no locks or
+atomics. Once the workers have built their books, threads share only the
+SPSC rings and a shutdown flag, and sharding by `stock_locate` spreads the
+books across cores. The rings are bounded, so a full ring makes the demux
+spin until its worker drains it; `spsc_stress` prints that full-stall count
+on every run.
 
 ## Synthetic benchmarks: the book in isolation
 
@@ -717,9 +717,9 @@ and is not redistributed here.
   size them from the previous day or a reserve. The two policy parameters
   (2,048 ticks, 8 misses) were fixed before either day was run, and two
   days on one laptop is the whole of the evidence.
-- The book does not match crossing orders; it is a *reconstructor*, and
-  crossings are resolved by the venue and arrive as Execute messages, per ITCH
-  semantics.
+- The book reconstructs the venue's order book and does no matching: the
+  venue resolves crossing orders, and they arrive as Execute messages, per
+  ITCH semantics.
 - The latency maxima (milliseconds in the recorded-day runs) are not book
   work (see *Recorded-day performance*); the p99.9 sits three orders of
   magnitude below them. On a tuned host you would pin to an isolated core
