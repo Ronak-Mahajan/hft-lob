@@ -1615,7 +1615,7 @@
       "causal_over_prescan_median_throughput": 0.932,
       "causal_over_first_add_median_throughput": 1.816
     },
-    "machine_state": "AC line online before and after every run; the battery charged from 27% to 99% over the two batches, which ran back to back (power state and busiest processes before each run in the env logs)",
+    "machine_state": "AC line online before every run, 39 of 39 (the power line at the top of each run log, and the env logs); the battery charged from 27% to 99% over the two batches, which ran back to back (power state and busiest processes before each run in the env logs)",
     "env_logs": ["results/perf_20190130_causal_env.log", "results/perf_20191230_causal_env.log"]
   },
   "data": {

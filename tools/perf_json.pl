@@ -295,7 +295,7 @@ sub placement_batch {
         ) } @{ $p->{l} }]);
         return obj(@o);
     };
-    return { P => \%P, commit => $commit, json => obj(
+    return { P => \%P, commit => $commit, runs => 3 * (5 + $n_lat), json => obj(
         commit => $commit,
         differential => $diff->{json},
         prescan => $pobj->('prescan'),
@@ -361,7 +361,7 @@ my $placement_json = obj(
                     gz_sha256 => 'ef03df46a27e6bda4dead017f84c2e3979df7211f02c7868b51d53fceb99c689'),
         (map { @$_ } @{ $pc2->{json} }),
     ),
-    machine_state => 'AC line online before and after every run; the battery charged from 27% to 99% over the two batches, which ran back to back (power state and busiest processes before each run in the env logs)',
+    machine_state => 'AC line online before every run, ' . ($pc1->{runs} + $pc2->{runs}) . ' of ' . ($pc1->{runs} + $pc2->{runs}) . ' (the power line at the top of each run log, and the env logs); the battery charged from 27% to 99% over the two batches, which ran back to back (power state and busiest processes before each run in the env logs)',
     env_logs => ['results/perf_20190130_causal_env.log', 'results/perf_20191230_causal_env.log'],
 );
 
