@@ -269,14 +269,16 @@ order (every message timed as described below):
 | pre-scan, 2 | 169 | 480 | 1,041 | 1,382 | 5,203 |
 
 On 2019-12-30: pre-scan p50 171 / p99 978 / p99.9 1,328, causal 174 / 1,082
-/ 2,020, first-add 199 / 1,804 / 2,648. The causal placement's cost sits in
-the messages that place or move a ladder, 27,343 of them on 2019-01-30:
-p50 1.4 us, p99 57 us, and at most 532 us in run 1. Most of them are
-replaces and adds, which is where its p99.9 rises above the pre-scan's (`U`
-3,508 ns against 1,727 in the first runs). Throughput varied more between
-rounds than between placements within a round (runs 1 to 5 of the pre-scan
-placement fell from 11.06M to 9.44M as the batch went on), so the
-comparison to read is the ratio within this batch, not these absolute
+/ 2,020, first-add 199 / 1,804 / 2,648.
+
+On 2019-01-30, 27,343 messages placed or moved a ladder, all of them adds
+or replaces: p50 1.4 us, p99 57 us, at most 532 us in run 1. The causal
+ladders also leave 1,161,147 adds (0.605%) in the O(log n) overflow,
+against the pre-scan's 196,611 (0.102%). Replaces (`U`) have a p99.9 of
+3,508 ns against the pre-scan's 1,727 in the first runs. Throughput varied
+more between rounds than between placements within a round (runs 1 to 5 of
+the pre-scan placement fell from 11.06M to 9.44M as the batch went on), so
+the comparison to read is the ratio within this batch, not these absolute
 numbers against the separate pre-scan batch below.
 
 **Single core, end to end** (pre-scan placement, its own batch built from
