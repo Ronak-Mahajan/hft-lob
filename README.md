@@ -233,8 +233,10 @@ the same pre-scan and streams the same file in 256 MB chunks. Every figure
 here: the 265H laptop above, on AC power, Windows 11 on the Balanced power
 plan, with a browser and other everyday applications open; g++ 16.1.0,
 `-O3 -march=native -DNDEBUG`. Each run pins its thread (logical CPU 1, a
-P-core, unless stated) and raises the process to high priority. The raw
-console output of every run is a `results/perf_*.log` file, and
+P-core, unless stated) and raises the process to high priority. The
+console output of every run is a `results/perf_*.log` file; its source line
+names the commit the tool was built from, and `data/MANIFEST.md` gives that
+commit's source tree.
 [`results/perf_20190130.json`](results/perf_20190130.json) and
 [`results/perf_20191230.json`](results/perf_20191230.json) collect every
 number, generated from the logs by `tools/perf_json.pl`, which refuses if

@@ -77,8 +77,13 @@
 
 #include "replay_day.hpp"
 
+// The build passes the commit and its source tree (git rev-parse HEAD and
+// HEAD^{tree}); the tree id names the compiled sources on its own.
 #ifndef LOB_GIT_COMMIT
   #define LOB_GIT_COMMIT "unknown"
+#endif
+#ifndef LOB_GIT_TREE
+  #define LOB_GIT_TREE "unknown"
 #endif
 #ifndef LOB_BUILD_FLAGS
   #define LOB_BUILD_FLAGS "unknown"
@@ -172,7 +177,7 @@ void print_machine(const std::vector<CpuSet>& cs) {
                     static_cast<unsigned>(ps.BatteryLifePercent), ps.SystemStatusFlag ? "on" : "off");
 #endif
     std::printf("  compiler: %s | flags: %s\n", compiler_name().c_str(), LOB_BUILD_FLAGS);
-    std::printf("  source: git commit %s\n", LOB_GIT_COMMIT);
+    std::printf("  source: git commit %s | tree %s\n", LOB_GIT_COMMIT, LOB_GIT_TREE);
 }
 
 // ============================================================================

@@ -93,36 +93,42 @@ in 256 MB chunks and never load it whole.
 
 The committed runs used Windows 11, Git Bash and MinGW-w64 g++ 16.1.0
 (WinLibs UCRT), with the README's build line. On Linux, drop `-static` and
-`.exe`. `LOB_GIT_COMMIT` is the commit a tool prints in its log header.
+`.exe`. `LOB_GIT_COMMIT` and `LOB_GIT_TREE` are the commit and its source
+tree; `lob_replay`, `lob_perf` and `lob_perf_latency` print both on their
+`source:` line. The tree id depends only on the files, so it identifies the
+compiled sources whatever the commit's message or parents.
 
 ```bash
 FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include"
 COMMIT=$(git rev-parse HEAD)
-g++ $FLAGS "-DLOB_GIT_COMMIT=\"$COMMIT\"" src/replay_main.cpp -o lob_replay.exe
+TREE=$(git rev-parse HEAD^{tree})
+g++ $FLAGS "-DLOB_GIT_COMMIT=\"$COMMIT\"" "-DLOB_GIT_TREE=\"$TREE\"" src/replay_main.cpp -o lob_replay.exe
 g++ $FLAGS src/main.cpp -o lob_bench.exe
 g++ $FLAGS src/parallel_main.cpp -o lob_parallel.exe
-g++ $FLAGS "-DLOB_GIT_COMMIT=\"$COMMIT\"" "-DLOB_BUILD_FLAGS=\"$FLAGS\"" src/perf_main.cpp -o lob_perf.exe
-g++ $FLAGS -DLOB_PERF_LATENCY "-DLOB_GIT_COMMIT=\"$COMMIT\"" "-DLOB_BUILD_FLAGS=\"$FLAGS -DLOB_PERF_LATENCY\"" src/perf_main.cpp -o lob_perf_latency.exe
+g++ $FLAGS "-DLOB_GIT_COMMIT=\"$COMMIT\"" "-DLOB_GIT_TREE=\"$TREE\"" "-DLOB_BUILD_FLAGS=\"$FLAGS\"" src/perf_main.cpp -o lob_perf.exe
+g++ $FLAGS -DLOB_PERF_LATENCY "-DLOB_GIT_COMMIT=\"$COMMIT\"" "-DLOB_GIT_TREE=\"$TREE\"" "-DLOB_BUILD_FLAGS=\"$FLAGS -DLOB_PERF_LATENCY\"" src/perf_main.cpp -o lob_perf_latency.exe
 g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static tools/itch_count.cpp -o itch_count.exe
 ```
 
-Which commit each committed log was built from:
+Which commit each committed log was built from, and that commit's source
+tree (`git rev-parse <commit>^{tree}`):
 
-| Logs | Built from |
-|---|---|
-| `replay_20190130_differential.log`, `closing_cross_replay_20190130.log`, `replay_fixture.log`, `replay_selftest.log` | `d191efd` (printed in each log; build lines in `replay_run_env.log`) |
-| `synthetic_*.log` | `fc9b010` (build lines in `replay_synthetic_run_env.log`) |
-| `perf_20190130_run_*.log` | `380902a` (printed in every log; build lines in `perf_20190130_run_env.log`) |
-| `perf_20190130_repro_*.log` | `1ed03a6` (printed in each log; build lines in `perf_20190130_repro_env.log`) |
-| `perf_20190130_placement_*_throughput.log` | `09da5d0` (printed in each log; build lines in `perf_20190130_placement_env.log`) |
-| `perf_20190130_placement_*_latency*.log` | `62f8be9` (printed in each log; build lines in `perf_20190130_placement_latency_env.log`) |
-| `itch_count_20190130.log` | `2f2082f` (build line at the top of the log) |
-| `replay_2019*_causal_differential.log`, `perf_2019*_causal_*.log` | `b8ea69f` (printed in each log; build lines in `perf_20190130_causal_env.log`) |
-| `mutants_moving_ladder.log` | the sources of `16db8f1`, built by the script itself |
+| Logs | Built from | Source tree |
+|---|---|---|
+| `replay_20190130_differential.log`, `closing_cross_replay_20190130.log`, `replay_fixture.log`, `replay_selftest.log` | `d191efd` (printed in each log; build lines in `replay_run_env.log`) | `e8dfaa3d5a4e2980501505932617b76fc42af473` |
+| `synthetic_*.log` | `fc9b010` (build lines in `replay_synthetic_run_env.log`) | `2ea2b39ddb538ed0bc7107c35b1673e15658c088` |
+| `perf_20190130_run_*.log` | `380902a` (printed in every log; build lines in `perf_20190130_run_env.log`) | `9fcdc7297901d6b538eddc6fae5e6aa3e03b17a7` |
+| `perf_20190130_repro_*.log` | `1ed03a6` (printed in each log; build lines in `perf_20190130_repro_env.log`) | `01c880c8d8cfdda22cf531ed94549d913b3310d3` |
+| `perf_20190130_placement_*_throughput.log` | `09da5d0` (printed in each log; build lines in `perf_20190130_placement_env.log`) | `8c1faa804bfcce09adcf874d4f43f64a207c843f` |
+| `perf_20190130_placement_*_latency*.log` | `62f8be9` (printed in each log; build lines in `perf_20190130_placement_latency_env.log`) | `4c730b7f62328ff876084bf48188408c287a8046` |
+| `itch_count_20190130.log` | `2f2082f` (build line at the top of the log) | `dc89a367d3b516e698937b4a5d0478319e3b8a99` |
+| `replay_2019*_causal_differential.log`, `perf_2019*_causal_*.log` | `b8ea69f` (printed in each log; build lines in `perf_20190130_causal_env.log`) | `3590233072fec9c758a4a0873cabe2b3c0898160` |
+| `mutants_moving_ladder.log` | the sources of `16db8f1`, built by the script itself | `5eef711789138674bbc1d0b8422fa139413e18a0` |
 
 At the commit that last updated this manifest, `lob_replay`, `lob_perf`
-and `lob_perf_latency` compile exactly the sources of `b8ea69f`, the build
-of the `*_causal_*` logs. Their default placement, `prescan`, is the
+and `lob_perf_latency` compile the sources of `b8ea69f`, the build of the
+`*_causal_*` logs, except for comments and the `source:` line, which also
+prints the source tree. Their default placement, `prescan`, is the
 placement of every earlier log, and the ladder hot path is the same code;
 since the builds of the earlier logs they gained `--placement causal`,
 `--recenter-after` and, in `lob_perf_latency`, the moving-ladder latency
