@@ -9,15 +9,33 @@
     },
     "single_core_ns_per_msg_median": 96.55,
     "per_message_latency_ns_all_messages": {
-      "run": "results/perf_20190130_causal_causal_latency_1.log",
-      "p50": 178,
-      "p90": 492,
-      "p99": 1017,
-      "p99.9": 1680,
-      "p99.99": 6413,
-      "max": 4040828
+      "runs": ["results/perf_20190130_causal_causal_latency_1.log", "results/perf_20190130_causal_causal_latency_2.log"],
+      "p50": {
+        "min": 170,
+        "max": 178
+      },
+      "p90": {
+        "min": 466,
+        "max": 492
+      },
+      "p99": {
+        "min": 965,
+        "max": 1017
+      },
+      "p99.9": {
+        "min": 1591,
+        "max": 1680
+      },
+      "p99.99": {
+        "min": 5885,
+        "max": 6413
+      },
+      "max": {
+        "min": 683998,
+        "max": 4040828
+      }
     },
-    "upper_bound_prescan_placement": {
+    "lookahead_prescan_placement": {
       "note": "ladders sized and placed from a pre-scan of the same day's file (look-ahead); same binary, same batch",
       "msgs_per_s_millions": {
         "median": 10.74,
@@ -25,11 +43,31 @@
         "max": 11.06
       },
       "per_message_latency_ns_all_messages": {
-        "run": "results/perf_20190130_causal_prescan_latency_1.log",
-        "p50": 184,
-        "p90": 539,
-        "p99": 1113,
-        "p99.9": 1659
+        "runs": ["results/perf_20190130_causal_prescan_latency_1.log", "results/perf_20190130_causal_prescan_latency_2.log"],
+        "p50": {
+          "min": 169,
+          "max": 184
+        },
+        "p90": {
+          "min": 480,
+          "max": 539
+        },
+        "p99": {
+          "min": 1041,
+          "max": 1113
+        },
+        "p99.9": {
+          "min": 1382,
+          "max": 1659
+        },
+        "p99.99": {
+          "min": 5203,
+          "max": 6605
+        },
+        "max": {
+          "min": 949010,
+          "max": 7094899
+        }
       }
     },
     "first_add_placement_msgs_per_s_millions_median": 4.45,
@@ -37,6 +75,25 @@
       "causal": 9.48,
       "prescan": 10.17,
       "first_add": 5.22
+    },
+    "second_day_20191230_latency_ns_all_messages": {
+      "causal": {
+        "run": "results/perf_20191230_causal_causal_latency_1.log",
+        "p50": 174,
+        "p99": 1082,
+        "p99.9": 2020
+      },
+      "prescan": {
+        "run": "results/perf_20191230_causal_prescan_latency_1.log",
+        "p50": 171,
+        "p99": 978,
+        "p99.9": 1328
+      },
+      "causal_over_prescan": {
+        "p50": 1.02,
+        "p99": 1.11,
+        "p99.9": 1.52
+      }
     },
     "multi_core_best_demux": {
       "workers": 5,
@@ -53,7 +110,7 @@
     "books_identical_to_differential_run": "yes, every run, at every chunk boundary"
   },
   "placement_comparison": {
-    "what": "the same binary with three ladder placements, run back to back and interleaved on logical CPU 1 (P-core), on AC power: prescan (sizes and windows from a pre-scan of the same file: look-ahead, an upper bound), first-add (fixed 2,048-tick ladders centered on each symbol's first add), causal (2,048-tick ladders each book centers on its first add and re-centers on its midpoint after 8 near-touch misses; the moves run inside the timed loop). Pool and id-map capacities come from the pre-scan in all three",
+    "what": "the same binary with three ladder placements, run back to back and interleaved on logical CPU 1 (P-core), on AC power: prescan (sizes and windows from a pre-scan of the same file: the look-ahead reference), first-add (fixed 2,048-tick ladders centered on each symbol's first add), causal (2,048-tick ladders each book centers on its first add and re-centers on its midpoint after 8 near-touch misses; the moves run inside the timed loop). Pool and id-map capacities come from the pre-scan in all three",
     "policy_parameters": {
       "ladder_ticks": "the widest power of two whose ladders fit the 1,024 MB budget across all books: 2,048 on both days",
       "near_touch_misses_before_a_move": 8,

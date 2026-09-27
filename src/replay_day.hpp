@@ -423,8 +423,8 @@ inline std::vector<Sizing> size_books(DayScan& d, uint64_t ladder_budget_bytes, 
 // Placement: where each book's ladder sits and how wide it is
 // ============================================================================
 // prescan    size_books() above: widths and windows from the day's add prices.
-//            It looks ahead in the file, so it is an upper bound, not a feed
-//            handler's policy.
+//            It looks ahead in the file, which a feed handler cannot do, and
+//            is the look-ahead reference the other two are compared with.
 // first-add  every ladder the same width (uniform_band()), centered on the
 //            symbol's first add, grid $0.01 if that add is at or above $1.00
 //            and $0.0001 below; never moves.

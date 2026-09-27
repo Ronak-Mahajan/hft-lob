@@ -43,17 +43,19 @@ orders.
   P-core (median of five runs, 96.55 ns/message; range 8.62-10.86M). In the
   same batch, with the same binary, ladders sized and placed from a pre-scan
   of the day's own file, which no live handler can do, measured 10.74M
-  (range 9.44-11.06M): an upper bound the causal placement comes within 4%
-  of. File reads are outside the timed loops.
+  (range 9.44-11.06M), a look-ahead reference the causal placement comes
+  within 4% of. File reads are outside the timed loops.
 - **Per-message latency over the whole day.** Every one of the 368,366,634
   messages timed on its own (the book lookup, decode and book update, on a
-  file already in memory), on one P-core: **p50 178 ns, p90 492 ns, p99
-  1,017 ns, p99.9 1,680 ns** (pre-scan placement, same batch: p50 184, p99
-  1,113, p99.9 1,659).
+  file already in memory), on one P-core, over two runs: **p50 170-178 ns,
+  p90 466-492 ns, p99 965-1,017 ns, p99.9 1,591-1,680 ns** (pre-scan
+  placement, same batch: p50 169-184, p99 1,041-1,113, p99.9 1,382-1,659).
 - **A second day.** On NASDAQ's 2019-12-30 sample (268,744,780 messages,
   8,892 books), with the policy's two parameters unchanged: 0 mismatches
   against the reference, and 9.48M messages/second against 10.17M for the
-  pre-scan placement.
+  pre-scan placement. The causal latency tail is wider there: p99 1,082 ns
+  against 978 (1.11x) and p99.9 2,020 ns against 1,328 (1.52x), one
+  latency run of each.
 - **Multi-core** (pre-scan placement): **52.54M** messages/second through
   one demux thread feeding five workers, and **99.80M** aggregate with the
   input pre-split across 13 workers.
@@ -99,9 +101,9 @@ sits is the `--placement`:
   displayed quotes there in whole cents) and $0.0001 below that. Ladder
   widths, from 64 to 131,072 ticks, come from a greedy split of the 1,024 MB
   budget by adds covered per tick, each ladder placed on the window where
-  that symbol's adds arrived during the day. This reads the day ahead, so it
-  is an upper bound rather than a policy: 191,722,488 adds (99.898%) landed
-  on a ladder.
+  that symbol's adds arrived during the day. This reads the day ahead, which
+  no live handler can do, and serves as the look-ahead reference:
+  191,722,488 adds (99.898%) landed on a ladder.
 - `first-add`: 2,048-tick ladders fixed at each symbol's first add: 93,816,959
   adds (48.9%).
 
@@ -409,7 +411,7 @@ and is the same in every run of a day.
 | Free management | intrusive LIFO free list through `Order::next` (hottest slot reused first) | `std::deque` free queue |
 | Order id lookup | flat open-addressing map, Fibonacci hash, linear probe, backward-shift erase (no tombstones to decay over a trading day) | `std::unordered_map` (node-based: a pointer chase per lookup and an allocation per insert) |
 | Price ladder | flat tick-indexed array per side, `levels[(price - base) / tick]`; the divide is one multiply-high by a precomputed reciprocal, skipped when the tick is 1 | `std::map` (O(log n), serialized pointer-chase misses) |
-| Price band | **per symbol, and it moves**: every `stock_locate` gets its own 2,048-tick ladder, placed on its first add and re-centered on the book's midpoint after 8 near-touch misses, from the messages already applied. *Trade-off*: a move costs microseconds on the message that triggers it (p50 1.4 us, p99 57 us on 2019-01-30), and its cost is in the timed loop. A pre-scan placement (64 to 131,072 ticks per symbol, where the day's adds arrive) is kept as the look-ahead upper bound. | one band for every symbol: the benchmark book's $0.01-$1,310.72 cannot hold AMZN or BKNG |
+| Price band | **per symbol, and it moves**: every `stock_locate` gets its own 2,048-tick ladder, placed on its first add and re-centered on the book's midpoint after 8 near-touch misses, from the messages already applied. *Trade-off*: a move costs microseconds on the message that triggers it (p50 1.4 us, p99 57 us on 2019-01-30), and its cost is in the timed loop. A pre-scan placement (64 to 131,072 ticks per symbol, where the day's adds arrive) is kept as the look-ahead reference. | one band for every symbol: the benchmark book's $0.01-$1,310.72 cannot hold AMZN or BKNG |
 | Price units and tick | ITCH's **native $0.0001 units**; the grid is $0.01 for a ladder centered at or above $1.00 and $0.0001 below (pre-scan: the symbol's median add). *Trade-off*: a tick other than 1 costs one multiply-high per lookup, and a price between two grid points (a sub-penny price in a dollar stock) cannot use the ladder. | whole cents everywhere, which merges distinct sub-penny prices into one level |
 | Prices off the ladder | **exact overflow**: a `std::map` per side from price to a level holding the same pool FIFO as a ladder level; BBO and depth merge the two by price, and a replace can move an order between them. *Trade-off*: that path is O(log n) and allocates one node per new level; on 2019-01-30 it took 1,161,147 of 191,919,099 adds (0.605%) with causal ladders, 196,611 (0.102%) with pre-scan. | dropping off-band adds and counting them (what the ladder-only `LimitOrderBook` of the benchmarks does), or rounding them onto the ladder |
 | Ladder-only vs exact book | one template, `BasicOrderBook<WithOverflow>`: `LimitOrderBook` compiles to exactly the ladder-only code the synthetic benchmarks time, `ExactOrderBook` adds the grid and the overflow | a runtime flag, which puts a branch in the benchmark book's hot path |

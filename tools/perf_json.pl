@@ -314,26 +314,40 @@ my $pc2 = placement_batch('perf_20191230_causal', $diff2, 1);
 my $cz = $pc1->{P}{causal};
 my $pz = $pc1->{P}{prescan};
 my $fz = $pc1->{P}{firstadd};
-my $cl = $cz->{l}[0]{ns}{all};
-my $pl1 = $pz->{l}[0]{ns}{all};
+# Latency over every run of a placement: each percentile as its min and max
+# across the runs, so no single run is paired against another.
+sub lat_span {
+    my @runs = @{ $_[0] };
+    my @h = map { $_->{ns}{all} } @runs;
+    my $span = sub { my $k = shift; my @v = sort { $a <=> $b } map { $_->{$k} } @h; obj(min => $v[0], max => $v[-1]) };
+    return obj(runs => [map { "results/$_->{file}" } @runs],
+               p50 => $span->('p50'), p90 => $span->('p90'), p99 => $span->('p99'), 'p99.9' => $span->('p999'), 'p99.99' => $span->('p9999'), max => $span->('max'));
+}
+my $c2l = $pc2->{P}{causal}{l}[0]{ns}{all};
+my $p2l = $pc2->{P}{prescan}{l}[0]{ns}{all};
 $headline = obj(
     placement => 'causal: each book places and moves its own ladder from the messages it has already applied (--placement causal)',
     single_core_msgs_per_s_millions => obj(median => $cz->{med}, min => $cz->{min}, max => $cz->{max}, runs => scalar @{ $cz->{t} }),
     single_core_ns_per_msg_median => $cz->{nsmed},
-    per_message_latency_ns_all_messages => obj(run => "results/$cz->{l}[0]{file}", p50 => $cl->{p50}, p90 => $cl->{p90}, p99 => $cl->{p99}, 'p99.9' => $cl->{p999}, 'p99.99' => $cl->{p9999}, max => $cl->{max}),
-    upper_bound_prescan_placement => obj(
+    per_message_latency_ns_all_messages => lat_span($cz->{l}),
+    lookahead_prescan_placement => obj(
         note => 'ladders sized and placed from a pre-scan of the same day\'s file (look-ahead); same binary, same batch',
         msgs_per_s_millions => obj(median => $pz->{med}, min => $pz->{min}, max => $pz->{max}),
-        per_message_latency_ns_all_messages => obj(run => "results/$pz->{l}[0]{file}", p50 => $pl1->{p50}, p90 => $pl1->{p90}, p99 => $pl1->{p99}, 'p99.9' => $pl1->{p999}),
+        per_message_latency_ns_all_messages => lat_span($pz->{l}),
     ),
     first_add_placement_msgs_per_s_millions_median => $fz->{med},
     second_day_20191230_msgs_per_s_millions_median => obj(causal => $pc2->{P}{causal}{med}, prescan => $pc2->{P}{prescan}{med}, first_add => $pc2->{P}{firstadd}{med}),
+    second_day_20191230_latency_ns_all_messages => obj(
+        causal => obj(run => "results/$pc2->{P}{causal}{l}[0]{file}", p50 => $c2l->{p50}, p99 => $c2l->{p99}, 'p99.9' => $c2l->{p999}),
+        prescan => obj(run => "results/$pc2->{P}{prescan}{l}[0]{file}", p50 => $p2l->{p50}, p99 => $p2l->{p99}, 'p99.9' => $p2l->{p999}),
+        causal_over_prescan => obj(p50 => r($c2l->{p50} / $p2l->{p50}, 2), p99 => r($c2l->{p99} / $p2l->{p99}, 2), 'p99.9' => r($c2l->{p999} / $p2l->{p999}, 2)),
+    ),
     multi_core_best_demux => obj(workers => $best_d->{w}, aggregate_msgs_per_s_millions => $best_d->{mps}, placement => 'prescan', commit => $commit),
     multi_core_best_presplit => obj(workers => $best_p->{w}, aggregate_msgs_per_s_millions => $best_p->{mps}, placement => 'prescan', commit => $commit),
     books_identical_to_differential_run => 'yes, every run, at every chunk boundary',
 );
 my $placement_json = obj(
-    what => 'the same binary with three ladder placements, run back to back and interleaved on logical CPU 1 (P-core), on AC power: prescan (sizes and windows from a pre-scan of the same file: look-ahead, an upper bound), first-add (fixed 2,048-tick ladders centered on each symbol\'s first add), causal (2,048-tick ladders each book centers on its first add and re-centers on its midpoint after 8 near-touch misses; the moves run inside the timed loop). Pool and id-map capacities come from the pre-scan in all three',
+    what => 'the same binary with three ladder placements, run back to back and interleaved on logical CPU 1 (P-core), on AC power: prescan (sizes and windows from a pre-scan of the same file: the look-ahead reference), first-add (fixed 2,048-tick ladders centered on each symbol\'s first add), causal (2,048-tick ladders each book centers on its first add and re-centers on its midpoint after 8 near-touch misses; the moves run inside the timed loop). Pool and id-map capacities come from the pre-scan in all three',
     policy_parameters => obj(
         ladder_ticks => 'the widest power of two whose ladders fit the 1,024 MB budget across all books: 2,048 on both days',
         near_touch_misses_before_a_move => 8,

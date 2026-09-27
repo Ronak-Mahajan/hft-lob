@@ -11,7 +11,7 @@
     "grid": "$0.01 for a center at or above $1.00, $0.0001 below",
     "chosen": "before any causal run on either day; not fitted to either day"
   },
-  "what": "the same binary with three ladder placements, run back to back and interleaved on logical CPU 1 (P-core), on AC power: prescan (sizes and windows from a pre-scan of the same file: look-ahead, an upper bound), first-add (fixed 2,048-tick ladders centered on each symbol's first add), causal (2,048-tick ladders each book centers on its first add and re-centers on its midpoint after 8 near-touch misses; the moves run inside the timed loop). Pool and id-map capacities come from the pre-scan in all three",
+  "what": "the same binary with three ladder placements, run back to back and interleaved on logical CPU 1 (P-core), on AC power: prescan (sizes and windows from a pre-scan of the same file: the look-ahead reference), first-add (fixed 2,048-tick ladders centered on each symbol's first add), causal (2,048-tick ladders each book centers on its first add and re-centers on its midpoint after 8 near-touch misses; the moves run inside the timed loop). Pool and id-map capacities come from the pre-scan in all three",
   "day_20191230": {
     "data": {
       "file": "12302019.NASDAQ_ITCH50",
