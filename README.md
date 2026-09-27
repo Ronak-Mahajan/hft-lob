@@ -37,9 +37,8 @@ orders.
   on its first add and re-centers it on the live market when adds start to
   miss it, using only the messages it has already applied, as a live feed
   handler would. The move runs inside the timed loop. 99.4% of the day's
-  adds land on a ladder, and the books are identical to the reference's
-  after every message (the checks above, rerun with this placement: 0
-  mismatches).
+  adds land on a ladder, and the per-message and checkpoint comparisons
+  above, rerun with this placement, find 0 mismatches.
 - **Throughput over the whole day.** **10.36M messages/second** on one
   P-core (median of five runs, 96.55 ns/message; range 8.62-10.86M). In the
   same batch, with the same binary, ladders sized and placed from a pre-scan
