@@ -637,11 +637,12 @@ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static `
 ./lob_bench.exe       # checks 1-9, latency percentiles, single-core throughput
 ./lob_parallel.exe    # parallel-vs-sequential verification, multi-core scaling
 ./spsc_stress.exe     # sequence-checked messages through the SPSC ring
-./lob_replay.exe --fixture                             # crafted file, 1-byte chunks up
-./lob_replay.exe --selftest                            # generated day, 4 KB chunks
-./lob_replay.exe 01302019.NASDAQ_ITCH50 --differential # the recorded day
-./lob_perf.exe 01302019.NASDAQ_ITCH50                  # single-core throughput on the day
-./lob_perf_latency.exe 01302019.NASDAQ_ITCH50          # every message timed
+./lob_replay.exe --fixture                                                # crafted file, 1-byte chunks up
+./lob_replay.exe --selftest                                               # generated day, 4 KB chunks
+./lob_replay.exe 01302019.NASDAQ_ITCH50 --differential --placement causal # the recorded day
+./lob_perf.exe 01302019.NASDAQ_ITCH50 --placement causal                  # single-core throughput on the day
+./lob_perf_latency.exe 01302019.NASDAQ_ITCH50 --placement causal          # every message timed
+./lob_perf.exe 01302019.NASDAQ_ITCH50 --placement prescan                 # the look-ahead reference placement
 ```
 
 Linux with g++ >= 11 or clang++ >= 14 (`std::latch` needs libstdc++ 11+):
