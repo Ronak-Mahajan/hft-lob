@@ -4,7 +4,7 @@ on:
     branches: ['**']
   pull_request:
 permissions:
-  contents: write
+  contents: read
 jobs:
   test:
     # Correctness legs only. Every leg is a single-TU compile with the same
@@ -53,6 +53,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: lower ASLR entropy for the sanitizer runtimes
         # Newer kernels default to 32 bits of mmap randomness, which the
         # gcc-13 ASan/TSan runtimes cannot map their shadow memory around.
