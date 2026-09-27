@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/book.hpp - Phase 2: the core engine.
+// lob/book.hpp - the order book.
 //
 //   PriceLevel          24-byte aggregate + FIFO queue head/tail (pool indices).
 //   BookSide<IsBid, Ov> flat tick-indexed ladder + occupancy bitmap + cached
@@ -15,9 +15,9 @@
 //   tree is O(log n) with a dependent-load pointer chase per node; each hop is
 //   a likely cache miss and the hops cannot overlap in the pipeline. On a
 //   5-deep tree that's ~5 serialized misses vs our 1.
-// * Adjacent prices are adjacent in memory. The inside of the book, where
-//   90% of traffic lands, occupies a handful of cache lines that simply
-//   stay resident in L1.
+// * Adjacent prices are adjacent in memory. Activity clusters at the inside
+//   of the book, and the levels there occupy a handful of adjacent cache
+//   lines.
 // * (*) The only non-O(1) moment is re-discovering the best price after the
 //   inside level empties. The occupancy bitmap makes that a tzcnt/lzcnt over
 //   64 prices per instruction, and because activity clusters at the inside,
@@ -78,10 +78,10 @@
 // for the ladder-only benchmark loops; with the template, LimitOrderBook
 // compiles to exactly the ladder-only code.
 //
-// Threading model: single writer, as in any serious feed handler. The message
-// stream is inherently sequential (book state N depends on N-1), so the right
-// concurrency answer is core-pinned single-threaded + SPSC queues around it,
-// not locks inside the book. Hence: zero atomics, zero locks in here.
+// Threading model: single writer. The message stream is inherently
+// sequential (book state N depends on N-1), so each book is owned by one
+// core-pinned thread with SPSC queues around it, and has no atomics and no
+// locks.
 // ---------------------------------------------------------------------------
 #include <cinttypes>
 #include <cstdio>

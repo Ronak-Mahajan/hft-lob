@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// spsc_stress.cpp - Phase 5: SPSC ring stress / ThreadSanitizer target.
+// spsc_stress.cpp - SPSC ring stress, the ThreadSanitizer target.
 //
 // One producer thread pushes N sequence-numbered messages of varying length
 // through a deliberately SMALL SpscRing (1024 slots) so the ring wraps

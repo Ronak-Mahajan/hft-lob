@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/spsc.hpp - Phase 5: wait-free single-producer/single-consumer ring.
+// lob/spsc.hpp - wait-free single-producer/single-consumer ring.
 //
 // Why SPSC and not a Disruptor-style MPMC or a mutex queue: the demux thread
 // is the only producer for a given shard and the shard worker is the only
@@ -8,7 +8,7 @@
 // acquire/release *loads and stores*: no CAS, no RMW, no lock. Both sides
 // are wait-free (the producer's "full" case spins in the caller, by policy).
 //
-// False-sharing architecture (the whole point of this file):
+// Layout against false sharing:
 //
 //   [ line 0 ]  ptail_, phead_cache_      producer-PRIVATE. Never read by
 //                                         the consumer; stays in M state in

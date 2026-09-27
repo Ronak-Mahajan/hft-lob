@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// main.cpp - Phase 4: verification & benchmarking.
+// main.cpp - lob_bench: verification and benchmarks.
 //
 // 1. Deterministic unit checks      - FIFO priority, BBO transitions, replace.
 // 2. Differential fuzz             - N million random ITCH messages through

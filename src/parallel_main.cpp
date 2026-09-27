@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// parallel_main.cpp - Phase 5: verification & scaling benchmarks.
+// parallel_main.cpp - lob_parallel: verification and scaling benchmarks.
 //
 // 1. Verification: the SAME multi-instrument stream is processed (a) by the
 //    parallel engine across N cores and (b) sequentially on one thread; every
@@ -287,7 +287,7 @@ int main(int argc, char** argv) {
     unsigned hw = std::thread::hardware_concurrency();
     unsigned max_workers = hw > 1 ? hw - 1 : 1;   // core 0 reserved for demux
     if (quick) max_workers = std::min(max_workers, 4u);
-    std::printf("=== Phase 5: sharded multi-core market engine%s ===\n",
+    std::printf("=== lob_parallel: sharded multi-core engine%s ===\n",
                 quick ? " (--quick: CI sizes, not a measurement)" : "");
     std::printf("hardware threads: %u | instruments: %u | messages: %zu\n\n",
                 hw, kInstruments, n_messages);

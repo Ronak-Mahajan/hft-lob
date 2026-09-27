@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/order_pool.hpp - Phase 1: the memory architecture.
+// lob/order_pool.hpp - order storage: the Order record, its pool, the id map.
 //
 //   Order       32-byte POD aligned to 32 bytes: two per 64-byte cache line,
 //               none straddling two lines.

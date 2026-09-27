@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/engine.hpp - Phase 5: sharded multi-core market engine.
+// lob/engine.hpp - sharded multi-core market engine.
 //
 // Topology:
 //
@@ -15,7 +15,7 @@
 // need no locks and no atomics of their own: ALL messages for a given
 // instrument land on ONE worker, and the ring is FIFO, so each book
 // still sees its message stream in exchange order, and the single-writer
-// LimitOrderBook from Phase 2 is reused byte-for-byte, no atomics added.
+// book (book.hpp) is reused unchanged, with no atomics added.
 // Cross-instrument ordering is not preserved, and doesn't need to be (the
 // venue itself splits ITCH across parallel MoldUDP channels).
 //

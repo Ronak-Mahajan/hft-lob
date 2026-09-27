@@ -1,6 +1,6 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/itch.hpp - Phase 3: NASDAQ ITCH 5.0 feed handler (zero-copy).
+// lob/itch.hpp - NASDAQ ITCH 5.0 feed handler (zero-copy).
 //
 // Wire facts:
 // * Every ITCH message is fixed-size and starts with a 1-byte type code.
