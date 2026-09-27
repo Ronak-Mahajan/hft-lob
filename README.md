@@ -534,11 +534,11 @@ counts; the rates a shared runner prints there are not measurements.
    orders resting on both edges of the ladder, then execute, cancel, delete
    and replace of orders that left the ladder, came onto it or shifted; a
    move down in which a two-order level keeps its FIFO; grid changes across
-   .00 in both directions; and what must not move a ladder (stub quotes,
+   $1.00 in both directions; and what must not move a ladder (stub quotes,
    deep orders, sub-penny prices, fewer than K near-touch misses)
 9. **moving-ladder fuzz**: streams whose prices drift, through books whose
    ladders move (64 or 256 ticks, K = 1, 2 or 8), including a symbol that
-   crosses .00 and ladders clamped at ../../readme2.pl and at the top of the u32 range,
+   crosses $1.00 and ladders clamped at $0 and at the top of the u32 range,
    compared with `ref::Market` after every order message, audited every
    1,000 messages and compared in full 40 times per configuration
 
@@ -566,7 +566,7 @@ of its chunk boundaries fall inside a message
 ([`results/replay_selftest.log`](results/replay_selftest.log); the
 fixture's output is [`results/replay_fixture.log`](results/replay_fixture.log)).
 Its second part replays a generated day whose prices drift, some across
-.00, through 64-tick causal ladders that move after 2 near-touch misses,
+$1.00, through 64-tick causal ladders that move after 2 near-touch misses,
 with the differential on: hundreds of ladder moves, each checked after the
 message that caused it.
 CI checks correctness, not speed: the messages/second a shared runner prints
