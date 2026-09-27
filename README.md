@@ -241,11 +241,11 @@ its day's differential run.
 
 **Placement, back to back.** One build (commit `b8ea69f`) of `lob_perf` and
 `lob_perf_latency`, run with `--placement prescan`, `first-add` and
-`causal` interleaved (each round of three in a different order), five
-throughput runs of each and then two latency runs of each, then the same on
-2019-12-30 (one latency run of each). Before every run the batch recorded
-the power state (AC online for all 39), the power plan and the busiest
-processes ([`results/perf_20190130_causal_env.log`](results/perf_20190130_causal_env.log),
+`causal` interleaved, the order of the three changing from one round to the
+next: five throughput runs of each and then two latency runs of each, then
+the same on 2019-12-30 (one latency run of each). Before every run the
+batch recorded the power state (AC online for all 39), the power plan and
+the busiest processes ([`results/perf_20190130_causal_env.log`](results/perf_20190130_causal_env.log),
 [`results/perf_20191230_causal_env.log`](results/perf_20191230_causal_env.log)).
 Single-core M messages/second, median (min-max) of five runs:
 
