@@ -30,11 +30,11 @@
 //    ladders in six configurations vs ref::Market after every message.
 //
 // Usage:  lob_bench [--quick] [--cpu N] [--only LIST]
-//   --quick  CI mode: smaller message counts (fuzz 250k, latency 100k,
-//            throughput 1M, exact fuzz 200k) so the whole run finishes in
-//            seconds. Every correctness check still runs; only the sizes
-//            shrink, and the numbers it prints are not the README's
-//            measurements.
+//   --quick  CI mode: smaller message counts (differential fuzz 250k,
+//            latency 100k, throughput 1M, exact fuzz 200k, moving-ladder
+//            fuzz 100k per configuration) so the whole run finishes in
+//            seconds. Every correctness check still runs, at those sizes,
+//            and the numbers it prints are not the README's measurements.
 //   --cpu N  pin the benchmark thread to logical CPU N (Windows builds;
 //            default 2).
 //   --only LIST  run only the listed sections, comma-separated: 1 to 7,

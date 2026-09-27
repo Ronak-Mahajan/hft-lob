@@ -559,10 +559,14 @@ CI (`.github/workflows/ci.yml`) builds every binary single-TU with
 `-std=c++20 -O2 -Wall -Wextra -pthread` on ubuntu (g++-13, clang++-18) and
 Windows (MinGW g++), with an ASan+UBSan leg, and runs `lob_bench --quick`,
 `lob_parallel --quick`, `lob_replay --selftest` and `spsc_stress`; a TSan
-leg runs `spsc_stress`. `--quick` shrinks the benchmark sizes only: every
-check above runs. The selftest replays a generated 40-symbol day of
-1,500,044 messages through 4,103-byte chunks with the differential; 11,352
-of its chunk boundaries fall inside a message
+leg runs `spsc_stress`. `--quick` runs every check above at reduced sizes:
+the fuzzes of checks 2 and 6 take 250,000 and 200,000 messages instead of
+2M each, check 9 takes 100,000 per configuration instead of 1M, and
+`lob_parallel` checks a 2M-message stream with min(4, hardware threads - 1)
+workers (at least 2; 3 on the 4-vCPU CI runners) instead of 16M messages
+with 8. The benchmarks shrink too. The selftest replays a generated
+40-symbol day of 1,500,044 messages through 4,103-byte chunks with the
+differential; 11,352 of its chunk boundaries fall inside a message
 ([`results/replay_selftest.log`](results/replay_selftest.log); the
 fixture's output is [`results/replay_fixture.log`](results/replay_fixture.log)).
 Its second part replays a generated day whose prices drift, some across
@@ -653,8 +657,8 @@ g++ -std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -DLOB_PERF_LATE
 ./lob_bench && ./lob_parallel && ./spsc_stress && ./lob_replay --fixture && ./lob_replay --selftest
 ```
 
-`lob_bench` takes `--quick` (the mode CI runs: every check still runs, only
-the benchmark sizes shrink, and the numbers it prints are not measurements)
+`lob_bench` takes `--quick` (the mode CI runs: every check runs at reduced
+message counts, and the numbers it prints are not measurements)
 and `--cpu N` (pin to logical CPU N on Windows; default 2, which on the 265H
 is an E-core). `lob_parallel` takes `--quick`.
 
