@@ -60,6 +60,15 @@
 #include "replay_fixture.hpp"
 #include "wire_gen.hpp"
 
+// The build passes the commit and its source tree (git rev-parse HEAD and
+// HEAD^{tree}), as for lob_replay and lob_perf.
+#ifndef LOB_GIT_COMMIT
+  #define LOB_GIT_COMMIT "unknown"
+#endif
+#ifndef LOB_GIT_TREE
+  #define LOB_GIT_TREE "unknown"
+#endif
+
 #ifdef _WIN32
   #define WIN32_LEAN_AND_MEAN
   #ifndef NOMINMAX
@@ -1192,6 +1201,7 @@ int main(int argc, char** argv) {
     double cpn = cycles_per_ns();
     std::printf("=== L2 Limit Order Book - verification & benchmarks%s ===\n",
                 quick ? " (--quick: CI sizes, not a measurement)" : "");
+    std::printf("source: git commit %s | tree %s\n", LOB_GIT_COMMIT, LOB_GIT_TREE);
     std::printf("TSC: %.2f cycles/ns  |  sizeof(Order)=%zu  sizeof(PriceLevel)=%zu\n\n",
                 cpn, sizeof(Order), sizeof(PriceLevel));
 
