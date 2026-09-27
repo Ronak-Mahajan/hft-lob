@@ -1,6 +1,6 @@
 Environment for the perf_20190130_run_*.log runs. This batch also ran lob_replay --differential, last
 in the run order below; results/replay_20190130_differential.log holds a later run of the same
-command, built from fc9b010, whose environment is in replay_synthetic_run_env.log.
+command, built from d191efd, whose environment is in replay_run_env.log.
 --- build (source commit 380902a3597da1ee8133e4db72e3461370b06d18, clean tree)
 ++ g++ --version
 ++ head -1
