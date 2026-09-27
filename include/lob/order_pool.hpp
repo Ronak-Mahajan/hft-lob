@@ -103,13 +103,16 @@ public:
           slots_(uint64_t{1} << capacity_log2)   // zero-initialized: key 0 = empty
     {}
 
-    // Full-table guard: with at least one empty slot the probe loop must
-    // terminate; without one it would spin forever. The live count is kept
-    // exact by insert/erase, so the check is one compare on the hot path.
-    // The intended operating point is load <= 0.5 (see LimitOrderBook's
-    // constructor check that pool capacity <= idmap capacity / 2).
+    // Full-table guard: the map holds at most capacity - 1 keys, so at least
+    // one slot is always empty and every probe in find() and erase() ends
+    // there. The live count is kept exact by insert/erase, so the check is
+    // one compare on the hot path. The intended operating point is
+    // load <= 0.5 (see LimitOrderBook's constructor check that pool capacity
+    // <= idmap capacity / 2).
+    bool full() const { return size_ >= mask_; }
+
     LOB_FORCE_INLINE void insert(uint64_t key, uint32_t val) {
-        LOB_ASSERT(size_ <= mask_, "OrderIdMap full");
+        LOB_ASSERT(!full(), "OrderIdMap full");
         uint64_t i = ideal(key);
         while (slots_[i].key != kEmpty) i = (i + 1) & mask_;
         slots_[i].key = key;

@@ -499,7 +499,8 @@ counts; the rates a shared runner prints there are not measurements.
 ## Tests and CI
 
 `lob_bench` runs, in order, and exits non-zero on any failed check:
-1. deterministic unit checks (FIFO priority, BBO transitions, replace semantics)
+1. deterministic unit checks (FIFO priority, BBO transitions, replace semantics,
+   and the id map filled to its limit)
 2. **differential fuzz**: 2M generated ITCH messages from a fixed seed
    (`A`/`F`/`E`/`C`/`X`/`D`/`U`, all seven types present and counted in the
    printed mix) replayed simultaneously into this book and a naive
@@ -583,7 +584,8 @@ under `--quick` are not measurements.
 
 Guards make a bad run loud. A length prefix that disagrees with the per-type
 ITCH table is refused before any cast and counted (`bad_length`). The id map
-aborts instead of probing forever when full, the book checks pool <= idmap / 2
+holds at most capacity - 1 keys, so every probe ends at an empty slot, and
+aborts on an insert past that; the book checks pool <= idmap / 2
 at construction, and the SPSC ring checks that a message fits its slot. Those
 three are `LOB_ASSERT`, a branch to `std::abort()` that `-DNDEBUG` does *not*
 compile out, so they hold in the release builds measured here.

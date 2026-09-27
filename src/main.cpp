@@ -437,6 +437,22 @@ static void unit_checks() {
     b.execute(9, 60);                          // full execution empties side
     q = b.bbo();
     CHECK(q.bid_qty == 0, "bid side empty");
+
+    // The id map at its limit: capacity - 1 keys, one slot left empty, so
+    // lookups and erases of an absent key still end.
+    OrderIdMap m(2);                           // 4 slots
+    for (uint32_t k = 1; k <= 3; ++k) {
+        CHECK(!m.full(), "id map takes keys below capacity - 1");
+        m.insert(k, k * 10);
+    }
+    CHECK(m.full() && m.size() == 3, "id map is full at capacity - 1");
+    CHECK(m.find(99) == NIL && m.find(1) == 10 && m.find(2) == 20 && m.find(3) == 30,
+          "lookups on a full id map");
+    m.erase(99);
+    CHECK(m.size() == 3, "erasing an absent key changes nothing");
+    m.erase(2);
+    CHECK(!m.full() && m.find(2) == NIL && m.find(1) == 10 && m.find(3) == 30,
+          "erase from a full id map");
     std::printf("  %s\n\n", g_failures == 0 ? "all passed" : "FAILURES ABOVE");
 }
 
