@@ -2,7 +2,8 @@
 // ---------------------------------------------------------------------------
 // lob/order_pool.hpp - Phase 1: the memory architecture.
 //
-//   Order       32-byte POD, exactly two per 64-byte cache line.
+//   Order       32-byte POD aligned to 32 bytes: two per 64-byte cache line,
+//               none straddling two lines.
 //   OrderPool   slab allocator: one up-front allocation, O(1) alloc/free via
 //               an intrusive free list threaded through Order::next.
 //   OrderIdMap  flat open-addressing hash map (order id → pool index).
@@ -12,9 +13,9 @@
 // ------------
 // * Pool indices (u32), never pointers. Half the width of a pointer, which is
 //   what gets Order down to 32 bytes; also relocation- and snapshot-safe.
-// * Field order inside Order is deliberate: the cancel path touches
-//   {qty, prev, next, level_idx}, all co-resident with id in one line, so an
-//   unlink costs a single L1 line, not a scatter of misses.
+// * The cancel path touches {qty, prev, next, level_idx}; the 32-byte
+//   alignment keeps them in one line with id, so the order's own fields
+//   cost a single L1 line on an unlink, not a scatter of misses.
 // * The free list is intrusive: a dead order's own `next` field is the link.
 //   Freeing is two stores; the pool carries zero per-slot metadata.
 // * LIFO free list on purpose: the most-recently-freed slot is the hottest in
@@ -40,9 +41,11 @@ enum class Side : uint8_t { Bid = 0, Ask = 1 };
 using Price = uint32_t;
 
 // --------------------------------------------------------------------------
-// Order - 32 bytes, POD.
+// Order - 32 bytes, POD, 32-byte aligned: a slot never straddles two cache
+// lines, whatever the pool's capacity (std::vector allocates an over-aligned
+// type with aligned operator new).
 // --------------------------------------------------------------------------
-struct Order {
+struct alignas(32) Order {
     uint64_t id;         // exchange order reference number
     uint32_t qty;        // remaining shares
     Price    price;      // exact price, in the book's units
@@ -53,7 +56,7 @@ struct Order {
     uint8_t  _pad[3];
 };
 static_assert(sizeof(Order) == 32, "two orders per cache line");
-static_assert(alignof(Order) == 8);
+static_assert(alignof(Order) == 32, "an Order never straddles a cache line");
 
 // --------------------------------------------------------------------------
 // OrderPool - pre-allocated slab, O(1) alloc/free, zero critical-path malloc.
@@ -62,7 +65,10 @@ class OrderPool {
 public:
     explicit OrderPool(uint32_t capacity)
         : slab_(capacity)      // the ONLY allocation, at startup
-    {}
+    {
+        LOB_ASSERT(reinterpret_cast<uintptr_t>(slab_.data()) % alignof(Order) == 0,
+                   "OrderPool slab is not 32-byte aligned");
+    }
 
     LOB_FORCE_INLINE uint32_t alloc() {
         if (LOB_LIKELY(free_head_ != NIL)) {        // reuse hottest slot first

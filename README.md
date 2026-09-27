@@ -409,7 +409,7 @@ and is the same in every run of a day.
 
 | Concern | Choice | Rejected alternative |
 |---|---|---|
-| Order storage | 32-byte POD in a pre-allocated slab, addressed by `u32` index (2 orders per cache line) | heap `Order*` (allocation, 8-byte pointers, fragmentation) |
+| Order storage | 32-byte POD, 32-byte aligned, in a pre-allocated slab, addressed by `u32` index (2 orders per cache line, none straddling two) | heap `Order*` (allocation, 8-byte pointers, fragmentation) |
 | Free management | intrusive LIFO free list through `Order::next` (hottest slot reused first) | `std::deque` free queue |
 | Order id lookup | flat open-addressing map, Fibonacci hash, linear probe, backward-shift erase (no tombstones to decay over a trading day) | `std::unordered_map` (node-based: a pointer chase per lookup and an allocation per insert) |
 | Price ladder | flat tick-indexed array per side, `levels[(price - base) / tick]`; the divide is one multiply-high by a precomputed reciprocal, skipped when the tick is 1 | `std::map` (O(log n), serialized pointer-chase misses) |
