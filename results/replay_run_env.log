@@ -1,8 +1,8 @@
-Environment for replay_20190130_differential.log, closing_cross_replay_20190130.log, replay_fixture.log and
-replay_selftest.log (the runs of the same names below; lob_bench_quick is lob_bench --quick, which runs every check
-and whose log is not in results/). The binaries were built into a scratch directory, shown below as bin/. The two
-replays of the recorded day ran with the directory holding 01302019.NASDAQ_ITCH50 as their working directory; the
-other runs ran from a scratch directory.
+Environment for replay_20190130_differential.log, closing_cross_replay_20190130.log and replay_fixture.log (the
+runs of the same names below). The replay_selftest and lob_bench_quick (lob_bench --quick) runs below have no log in
+results/; results/replay_selftest.log is a later run whose source line names its build. The binaries were built
+into a scratch directory, shown below as bin/. The two replays of the recorded day ran with the directory holding
+01302019.NASDAQ_ITCH50 as their working directory; the other runs ran from a scratch directory.
 --- build (source: git archive of commit d191efd0d42adb9f10fdcfa47524371cd5f28866 into a clean directory)
 + g++ --version
 + head -1

@@ -1,0 +1,12 @@
+=== L2 Limit Order Book - verification & benchmarks ===
+source: git commit 01a8275e7b841e4f324986a8fed42a9ecd54c00e | tree 84d45a353ec6376396e71b125c576aeb8de3c908
+TSC: 3.69 cycles/ns  |  sizeof(Order)=32  sizeof(PriceLevel)=24
+
+[8] Moving ladder unit checks (placement, moves with orders at the band edges, orders that moved, grid changes, what does not move a ladder)
+  all passed
+
+[9] Moving ladder fuzz: 1000000 drifting wire-unit messages x 6 ladder configurations, 6 symbols, vs ref::Market
+  6000060 messages, 5819913 checked after the message, 3451 ladder moves (112 onto a new grid), 3144305 orders relinked, 0 mismatches, 0 failed audits - PASS
+
+All verification passed.
+exit 0

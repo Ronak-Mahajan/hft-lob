@@ -546,7 +546,12 @@ counts; the rates a shared runner prints there are not measurements.
    ladders move (64 or 256 ticks, K = 1, 2 or 8), including a symbol that
    crosses $1.00 and ladders clamped at $0 and at the top of the u32 range,
    compared with `ref::Market` after every order message, audited every
-   1,000 messages and compared in full 40 times per configuration
+   1,000 messages and compared in full 41 times per configuration
+
+Checks 8 and 9 at full size, run on their own (`--only 8a,8b,8c,8d,9`): the
+fuzz applies 6,000,060 messages, moves ladders 3,451 times (112 onto a new
+grid) and relinks 3,144,305 orders, with 0 mismatches and 0 failed audits
+([`results/synthetic_lob_bench_moving_ladder.log`](results/synthetic_lob_bench_moving_ladder.log)).
 
 `lob_parallel` runs one multi-instrument stream through one thread and
 through the sharded engine and requires every instrument's full-band depth,
@@ -577,8 +582,9 @@ differential; 11,352 of its chunk boundaries fall inside a message
 fixture's output is [`results/replay_fixture.log`](results/replay_fixture.log)).
 Its second part replays a generated day whose prices drift, some across
 $1.00, through 64-tick causal ladders that move after 2 near-touch misses,
-with the differential on: hundreds of ladder moves, each checked after the
-message that caused it.
+with the differential on: 650 ladder moves, 9 of them onto a new grid,
+relinking 164,850 orders, each move checked after the message that caused
+it.
 CI checks correctness, not speed: the messages/second a shared runner prints
 under `--quick` are not measurements.
 

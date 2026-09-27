@@ -94,16 +94,16 @@ in 256 MB chunks and never load it whole.
 The committed runs used Windows 11, Git Bash and MinGW-w64 g++ 16.1.0
 (WinLibs UCRT), with the README's build line. On Linux, drop `-static` and
 `.exe`. `LOB_GIT_COMMIT` and `LOB_GIT_TREE` are the commit and its source
-tree; `lob_replay`, `lob_perf` and `lob_perf_latency` print both on their
-`source:` line. The tree id depends only on the files, so it identifies the
-compiled sources whatever the commit's message or parents.
+tree; `lob_replay`, `lob_perf`, `lob_perf_latency` and `lob_bench` print
+both on their `source:` line. The tree id depends only on the files, so it
+identifies the compiled sources whatever the commit's message or parents.
 
 ```bash
 FLAGS="-std=c++20 -O3 -march=native -DNDEBUG -Wall -Wextra -pthread -static -I include"
 COMMIT=$(git rev-parse HEAD)
 TREE=$(git rev-parse HEAD^{tree})
 g++ $FLAGS "-DLOB_GIT_COMMIT=\"$COMMIT\"" "-DLOB_GIT_TREE=\"$TREE\"" src/replay_main.cpp -o lob_replay.exe
-g++ $FLAGS src/main.cpp -o lob_bench.exe
+g++ $FLAGS "-DLOB_GIT_COMMIT=\"$COMMIT\"" "-DLOB_GIT_TREE=\"$TREE\"" src/main.cpp -o lob_bench.exe
 g++ $FLAGS src/parallel_main.cpp -o lob_parallel.exe
 g++ $FLAGS "-DLOB_GIT_COMMIT=\"$COMMIT\"" "-DLOB_GIT_TREE=\"$TREE\"" "-DLOB_BUILD_FLAGS=\"$FLAGS\"" src/perf_main.cpp -o lob_perf.exe
 g++ $FLAGS -DLOB_PERF_LATENCY "-DLOB_GIT_COMMIT=\"$COMMIT\"" "-DLOB_GIT_TREE=\"$TREE\"" "-DLOB_BUILD_FLAGS=\"$FLAGS -DLOB_PERF_LATENCY\"" src/perf_main.cpp -o lob_perf_latency.exe
@@ -115,8 +115,9 @@ tree (`git rev-parse <commit>^{tree}`):
 
 | Logs | Built from | Source tree |
 |---|---|---|
-| `replay_20190130_differential.log`, `closing_cross_replay_20190130.log`, `replay_fixture.log`, `replay_selftest.log` | `d191efd` (printed in each log; build lines in `replay_run_env.log`) | `e8dfaa3d5a4e2980501505932617b76fc42af473` |
-| `synthetic_*.log` | `fc9b010` (build lines in `replay_synthetic_run_env.log`) | `2ea2b39ddb538ed0bc7107c35b1673e15658c088` |
+| `replay_20190130_differential.log`, `closing_cross_replay_20190130.log`, `replay_fixture.log` | `d191efd` (printed in each log; build lines in `replay_run_env.log`) | `e8dfaa3d5a4e2980501505932617b76fc42af473` |
+| `replay_selftest.log`, `synthetic_lob_bench_moving_ladder.log` | `01a8275` (printed in each log, with its tree; built with the lines above) | `84d45a353ec6376396e71b125c576aeb8de3c908` |
+| `synthetic_lob_bench_run_{1,2,3}.log`, `synthetic_lob_parallel_run_1.log` | `fc9b010` (build lines in `replay_synthetic_run_env.log`) | `2ea2b39ddb538ed0bc7107c35b1673e15658c088` |
 | `perf_20190130_run_*.log` | `380902a` (printed in every log; build lines in `perf_20190130_run_env.log`) | `9fcdc7297901d6b538eddc6fae5e6aa3e03b17a7` |
 | `perf_20190130_repro_*.log` | `1ed03a6` (printed in each log; build lines in `perf_20190130_repro_env.log`) | `01c880c8d8cfdda22cf531ed94549d913b3310d3` |
 | `perf_20190130_placement_*_throughput.log` | `09da5d0` (printed in each log; build lines in `perf_20190130_placement_env.log`) | `8c1faa804bfcce09adcf874d4f43f64a207c843f` |
@@ -125,18 +126,36 @@ tree (`git rev-parse <commit>^{tree}`):
 | `replay_2019*_causal_differential.log`, `perf_2019*_causal_*.log` | `b8ea69f` (printed in each log; build lines in `perf_20190130_causal_env.log`) | `3590233072fec9c758a4a0873cabe2b3c0898160` |
 | `mutants_moving_ladder.log` | the sources of `16db8f1`, built by the script itself | `5eef711789138674bbc1d0b8422fa139413e18a0` |
 
-At the commit that last updated this manifest, `lob_replay`, `lob_perf`
-and `lob_perf_latency` compile the sources of `b8ea69f`, the build of the
-`*_causal_*` logs, except for comments and the `source:` line, which also
-prints the source tree. Their default placement, `prescan`, is the
-placement of every earlier log, and the ladder hot path is the same code;
-since the builds of the earlier logs they gained `--placement causal`,
+The recorded-day timings come from `b8ea69f`, the build of the
+`*_causal_*` logs, and from the earlier builds in the table. At the commit
+that last updated this manifest, `lob_replay`, `lob_perf` and
+`lob_perf_latency` differ from `b8ea69f` in these ways:
+
+- `Order` is declared `alignas(32)`, so every order-pool slab starts on a
+  32-byte boundary and no slot straddles two cache lines. `b8ea69f` leaves
+  the slab's alignment to the allocator, so the timed loop's memory layout
+  differs, and no committed timing uses the aligned layout.
+- ITCH fields are read with a fixed-size `std::memcpy` in place of a
+  pointer cast; with g++ 16.1 and the flags above, the three tools compile
+  to the same instruction streams either way.
+- A failed `LOB_ASSERT` writes its condition, message and source location
+  to stderr before it aborts; the check itself is still one branch. The id
+  map holds at most capacity - 1 keys; a book's id map has at least twice
+  as many slots as its pool, so the books never reach that limit.
+- A file that cannot be opened or read ends the run with exit status 2, and
+  each `lob_perf` mode opens the file before it builds books or starts
+  threads.
+- The `source:` line also prints the source tree.
+
+Their default placement, `prescan`, is the placement of every earlier log,
+and since the builds of the earlier logs they gained `--placement causal`,
 `--recenter-after` and, in `lob_perf_latency`, the moving-ladder latency
-line. `lob_bench` gained checks 8 and 9 and `--only`; the `LimitOrderBook`
-code its benchmarks time is unchanged apart from `add()` calling a
-force-inlined helper, as is the engine `lob_parallel` times.
-`tools/itch_count.cpp` is unchanged since `2f2082f`. To build exactly the
-source a log names, `git checkout` that commit first.
+line. `lob_bench` gained checks 8 and 9, `--only` and the `source:` line;
+the `LimitOrderBook` code its benchmarks time differs from `fc9b010` in
+`add()` calling a force-inlined helper and in the `Order` alignment, as
+does the engine `lob_parallel` times. `tools/itch_count.cpp` is unchanged
+since `2f2082f`. To build exactly the source a log names, `git checkout`
+that commit first.
 
 ## Reproducing every file in `results/`
 
@@ -179,6 +198,7 @@ No market data needed, from any directory:
 | `synthetic_lob_parallel_run_1.log` | `run synthetic_lob_parallel_run_1.log ./lob_parallel.exe` |
 | `replay_fixture.log` | `run replay_fixture.log ./lob_replay.exe --fixture` |
 | `replay_selftest.log` | `run replay_selftest.log ./lob_replay.exe --selftest` |
+| `synthetic_lob_bench_moving_ladder.log` | `run synthetic_lob_bench_moving_ladder.log ./lob_bench.exe --cpu 1 --only 8a,8b,8c,8d,9` |
 | `official_close_yahoo_20190130.log` | `bash tools/official_close_yahoo.sh > results/official_close_yahoo_20190130.log` (network; rerun on 2026-09-21, its output differed from the committed log only in the fetch time on the first line) |
 | `official_close_nasdaq_20190130.log` | `bash tools/official_close_nasdaq.sh > results/official_close_nasdaq_20190130.log` (network) |
 | `perf_20190130.json` | `perl tools/perf_json.pl results > results/perf_20190130.json` (built from the committed logs; refuses if any run failed, a placement-batch run was not on AC power, or any run printed a book digest different from its day's differential run) |
