@@ -587,8 +587,10 @@ ITCH table is refused before any cast and counted (`bad_length`). The id map
 holds at most capacity - 1 keys, so every probe ends at an empty slot, and
 aborts on an insert past that; the book checks pool <= idmap / 2
 at construction, and the SPSC ring checks that a message fits its slot. Those
-three are `LOB_ASSERT`, a branch to `std::abort()` that `-DNDEBUG` does *not*
-compile out, so they hold in the release builds measured here.
+three are `LOB_ASSERT`: one branch to a cold function that writes the failed
+condition, its message and its file and line to stderr and calls
+`std::abort()`. `-DNDEBUG` does *not* compile it out, so the guards hold in
+the release builds measured here.
 
 ## Layout
 

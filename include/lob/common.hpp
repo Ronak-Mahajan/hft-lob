@@ -1,10 +1,12 @@
 #pragma once
 // ---------------------------------------------------------------------------
-// lob/common.hpp - platform shims: byte order, timestamps, branch hints.
-// C++20, header-only. No allocation, no exceptions on any path in this file.
+// lob/common.hpp - platform shims: byte order, timestamps, branch hints, and
+// the fatal-invariant check. C++20, header-only. No allocation and no
+// exceptions on any path in this file except die(), which prints and aborts.
 // ---------------------------------------------------------------------------
 #include <bit>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 
 #if defined(_MSC_VER)
@@ -90,10 +92,18 @@ LOB_FORCE_INLINE uint64_t rdtsc_begin() {
 LOB_FORCE_INLINE uint64_t rdtsc_end() { return rdtsc_begin(); }
 #endif
 
-// Fatal invariant violation. Kept out-of-line and cold; the checks that call
-// it compile to a single predictable branch on the hot path.
-[[noreturn]] inline void die(const char* /*msg*/) { std::abort(); }
+// Fatal invariant violation: flushes stdout, so a log keeps everything
+// printed before the failure, writes the failed condition, its message and
+// its source location to stderr, and aborts. Out of line and cold, so each
+// check compiles to one predictable branch on the hot path.
+[[noreturn]] LOB_COLD inline void die(const char* msg, const char* cond, const char* file, int line) {
+    std::fflush(stdout);
+    std::fprintf(stderr, "%s:%d: LOB_ASSERT(%s) failed: %s\n", file, line, cond, msg);
+    std::fflush(stderr);
+    std::abort();
+}
 
-#define LOB_ASSERT(cond, msg) do { if (LOB_UNLIKELY(!(cond))) ::lob::die(msg); } while (0)
+#define LOB_ASSERT(cond, msg) \
+    do { if (LOB_UNLIKELY(!(cond))) ::lob::die((msg), #cond, __FILE__, __LINE__); } while (0)
 
 } // namespace lob
