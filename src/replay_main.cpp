@@ -54,6 +54,8 @@
 //                             prices drift (some across $1.00) with causal
 //                             ladders 64 ticks wide that move after 2
 //                             near-touch misses, differential on
+// Exit status: 0 when every check passes, 1 when one fails, 2 when a file
+// cannot be opened, read or written, or an option is malformed.
 // ---------------------------------------------------------------------------
 #include <algorithm>
 #include <cstdint>
@@ -70,6 +72,15 @@
 using namespace day;
 
 namespace {
+
+// Writes a generated day to `path`; false if any step of the write fails,
+// including the flush at fclose.
+bool write_file(const char* path, const std::vector<uint8_t>& bytes) {
+    FILE* f = std::fopen(path, "wb");
+    if (!f) return false;
+    const bool wrote = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+    return std::fclose(f) == 0 && wrote;
+}
 
 // A generated day (src/wire_gen.hpp) written to disk and replayed with the
 // differential through deliberately small, odd-sized chunks, so that
@@ -88,12 +99,10 @@ int selftest() {
     WireGen gen(0x5E1F7E57ull, syms, 30'000);
     gen.generate(1'500'000);
     const char* path = "lob_replay_selftest.itch";
-    FILE* f = std::fopen(path, "wb");
-    if (!f || std::fwrite(gen.bytes.data(), 1, gen.bytes.size(), f) != gen.bytes.size()) {
+    if (!write_file(path, gen.bytes)) {
         std::printf("selftest: cannot write %s\n", path);
         return 2;
     }
-    std::fclose(f);
     ReplayOptions o;
     o.path = path;
     o.differential = true;
@@ -126,12 +135,10 @@ int selftest() {
     g2.set_drift(2);
     g2.generate(1'000'000);
     const char* path2 = "lob_replay_selftest_causal.itch";
-    f = std::fopen(path2, "wb");
-    if (!f || std::fwrite(g2.bytes.data(), 1, g2.bytes.size(), f) != g2.bytes.size()) {
+    if (!write_file(path2, g2.bytes)) {
         std::printf("selftest: cannot write %s\n", path2);
         return 2;
     }
-    std::fclose(f);
     ReplayOptions c = o;
     c.path = path2;
     c.symbols = {"DRF0", "DRF1", "DRF5"};

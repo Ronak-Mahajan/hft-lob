@@ -293,7 +293,7 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
     if (!o.quiet) std::fflush(stdout);
 
     ChunkReader rd(o.path.c_str(), o.chunk);
-    if (!rd.ok()) { std::printf("cannot open %s\n", o.path.c_str()); return 2; }
+    if (!rd.ok()) return cannot_open(o.path);
     uint64_t n = 0, bad_length = 0, mismatches = 0, checkpoints = 0, printed = 0;
     uint64_t touch_mismatches = 0;      // per-message checks that found a difference
     TouchTotals touched;                // what the per-message checks compared
@@ -422,6 +422,7 @@ inline int replay(const ReplayOptions& o, ReplayReport* report = nullptr) {
         consumed = p;
         carry = static_cast<size_t>(end - p);
     }
+    if (rd.error()) return read_error(o.path, n);
 
     // ---- totals -----------------------------------------------------------
     uint64_t dropped = 0, unknown = 0, ovf_adds = 0, resting = 0;

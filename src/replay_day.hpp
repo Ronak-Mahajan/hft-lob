@@ -109,12 +109,17 @@ public:
     }
     ~ChunkReader() { if (f_) std::fclose(f_); }
     bool ok() const { return f_ != nullptr; }
+    // A read failed (std::ferror). next() then returns false as it does at
+    // the end of the file, so every loop over next() checks this after it.
+    bool error() const { return err_; }
 
     // Refills the buffer: the unconsumed tail of the previous chunk (from
     // `consumed` on) is moved to the front, then up to `chunk` new bytes are
     // read after it. Returns false once the file is exhausted and nothing is
-    // left. [data(), data() + size()) is valid until the next call.
+    // left, when the file is not open, or on a read error.
+    // [data(), data() + size()) is valid until the next call.
     bool next(const uint8_t* consumed) {
+        if (!f_ || err_) return false;
         size_t carry = 0;
         if (consumed) {
             carry = static_cast<size_t>((buf_.data() + len_) - consumed);
@@ -123,7 +128,8 @@ public:
         size_t n = std::fread(buf_.data() + carry, 1, chunk_, f_);
         bytes_ += n;
         len_ = carry + n;
-        if (n == 0) { tail_ = carry; return false; }
+        if (n < chunk_ && std::ferror(f_)) err_ = true;
+        if (n == 0 || err_) { tail_ = carry; return false; }
         return true;
     }
     const uint8_t* data() const { return buf_.data(); }
@@ -137,7 +143,19 @@ private:
     std::vector<uint8_t> buf_;
     size_t len_ = 0, tail_ = 0;
     uint64_t bytes_ = 0;
+    bool err_ = false;
 };
+
+// Exit status 2 is an input that cannot be read, as opposed to 1, a check
+// that failed.
+inline int cannot_open(const std::string& path) {
+    std::printf("cannot open %s\n", path.c_str());
+    return 2;
+}
+inline int read_error(const std::string& path, uint64_t messages) {
+    std::printf("read error in %s after %s messages\n", path.c_str(), num(messages).c_str());
+    return 2;
+}
 
 // ============================================================================
 // Pass 1: pre-scan
@@ -171,7 +189,7 @@ struct DayScan {
 
 inline void prescan(const char* path, size_t chunk, DayScan& d) {
     ChunkReader rd(path, chunk);
-    if (!rd.ok()) { std::printf("cannot open %s\n", path); std::exit(2); }
+    if (!rd.ok()) std::exit(cannot_open(path));
     struct Live { uint16_t locate; uint32_t shares; };
     std::unordered_map<uint64_t, Live> live;
     live.reserve(1u << 22);
@@ -283,6 +301,7 @@ inline void prescan(const char* path, size_t chunk, DayScan& d) {
         }
         consumed = p;
     }
+    if (rd.error()) std::exit(read_error(path, d.messages));
     while (next_at < d.at_ns.size()) d.at_index[next_at++] = d.messages;
     d.bytes = rd.bytes();
     d.trailing = rd.trailing();

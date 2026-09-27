@@ -51,6 +51,8 @@
 //                 [--placement prescan|first-add|causal] [--recenter-after N]
 //   lob_perf_latency FILE [--cpu N] [--chunk-mb N] [--ladder-mb N]
 //                         [--placement prescan|first-add|causal] [--recenter-after N]
+// Exit status: 0 when every check passes, 1 when one fails, 2 when the file
+// cannot be opened or read, or an option is malformed.
 // ---------------------------------------------------------------------------
 #if defined(_WIN32) && !defined(_WIN32_WINNT)
   #define _WIN32_WINNT 0x0A00             // Windows 10: GetSystemCpuSetInformation
@@ -390,6 +392,8 @@ void boost_process() {
 // --mode single
 // ============================================================================
 int run_single(const Options& o, const Day& day, unsigned cpu) {
+    ChunkReader rd(o.path.c_str(), o.chunk);
+    if (!rd.ok()) return cannot_open(o.path);
     std::vector<std::unique_ptr<ExactOrderBook>> owned(65536);
     std::vector<ExactOrderBook*> books(65536, nullptr);
     const bool pinned = pin_current_thread(cpu);
@@ -401,7 +405,6 @@ int run_single(const Options& o, const Day& day, unsigned cpu) {
                 "chunk in memory, summed\n", pinned ? "pinned to" : "NOT pinned, asked for", cpu);
     std::fflush(stdout);
 
-    ChunkReader rd(o.path.c_str(), o.chunk);
     EndState e;
     double timed_s = 0;
     uint64_t timed_cycles = 0;
@@ -426,6 +429,7 @@ int run_single(const Options& o, const Day& day, unsigned cpu) {
         consumed = p;
     }
     const Stamp s1 = stamp();
+    if (rd.error()) return read_error(o.path, e.messages);
     e.trailing = rd.trailing();
     tally_books(books.data(), e);
     const double ghz = ghz_between(s0, s1);
@@ -444,6 +448,8 @@ int run_single(const Options& o, const Day& day, unsigned cpu) {
 // --mode demux
 // ============================================================================
 int run_demux(const Options& o, const Day& day, const std::vector<unsigned>& cpus, unsigned W) {
+    ChunkReader rd(o.path.c_str(), o.chunk);            // opened before any thread starts
+    if (!rd.ok()) return cannot_open(o.path);
     uint16_t max_loc = 0;
     for (uint32_t loc = 0; loc < 65536; ++loc) if (day.z[loc].has_book) max_loc = static_cast<uint16_t>(loc);
     std::vector<unsigned> use(cpus.begin(), cpus.begin() + W + 1);
@@ -457,7 +463,6 @@ int run_demux(const Options& o, const Day& day, const std::vector<unsigned>& cpu
     std::vector<ExactOrderBook*> books(65536, nullptr);
     for (uint32_t loc = 1; loc <= max_loc; ++loc) books[loc] = eng.book(static_cast<uint16_t>(loc));
 
-    ChunkReader rd(o.path.c_str(), o.chunk);
     EndState e;
     double timed_s = 0;
     const uint8_t* consumed = nullptr;
@@ -488,6 +493,7 @@ int run_demux(const Options& o, const Day& day, const std::vector<unsigned>& cpu
         consumed = p + fed;
     }
     eng.finish();
+    if (rd.error()) return read_error(o.path, total_msgs);
     e.trailing = rd.trailing();
     uint64_t lo = ~uint64_t{0}, hi = 0;
     for (unsigned w = 0; w < W; ++w) {
@@ -511,6 +517,8 @@ int run_demux(const Options& o, const Day& day, const std::vector<unsigned>& cpu
 // --mode presplit
 // ============================================================================
 int run_presplit(const Options& o, const Day& day, const std::vector<unsigned>& cpus, unsigned W) {
+    ChunkReader rd(o.path.c_str(), o.chunk);            // opened before the workers start
+    if (!rd.ok()) return cannot_open(o.path);
     std::vector<unsigned> use(cpus.begin(), cpus.begin() + W + 1);
     std::printf("presplit, W = %u workers | main cpu %u | worker cpus", W, use[0]);
     for (unsigned w = 1; w <= W; ++w) std::printf(" %u", use[w]);
@@ -551,7 +559,6 @@ int run_presplit(const Options& o, const Day& day, const std::vector<unsigned>& 
     pin_current_thread(use[0]);
     ready.arrive_and_wait();
 
-    ChunkReader rd(o.path.c_str(), o.chunk);
     EndState e;
     double timed_s = 0;
     const uint8_t* consumed = nullptr;
@@ -589,6 +596,7 @@ int run_presplit(const Options& o, const Day& day, const std::vector<unsigned>& 
     }
     go.store(~uint64_t{0}, std::memory_order_release);
     for (auto& t : threads) t.join();
+    if (rd.error()) return read_error(o.path, total_msgs);
     e.trailing = rd.trailing();
     uint64_t lo = ~uint64_t{0}, hi = 0;
     for (unsigned w = 0; w < W; ++w) {
@@ -695,6 +703,8 @@ void busy_spin(double seconds) {
 }
 
 int run_latency(const Options& o, const Day& day, unsigned cpu) {
+    ChunkReader rd(o.path.c_str(), o.chunk);
+    if (!rd.ok()) return cannot_open(o.path);
     std::vector<std::unique_ptr<ExactOrderBook>> owned(65536);
     std::vector<ExactOrderBook*> books(65536, nullptr);
     const bool pinned = pin_current_thread(cpu);
@@ -727,7 +737,6 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
     const bool causal = day.placement == Placement::Causal;
     Hist moved;
     std::vector<uint64_t> moves_seen(65536, 0);
-    ChunkReader rd(o.path.c_str(), o.chunk);
     EndState e;
     std::vector<uint64_t> chunk_min;                       // empty-pair minimum after each chunk
     std::vector<uint64_t> cal;
@@ -771,6 +780,7 @@ int run_latency(const Options& o, const Day& day, unsigned cpu) {
         consumed = p;
     }
     const Stamp s1 = stamp();
+    if (rd.error()) return read_error(o.path, e.messages);
     e.trailing = rd.trailing();
     tally_books(books.data(), e);
     const double ghz = ghz_between(s0, s1);
